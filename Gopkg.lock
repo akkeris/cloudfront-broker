@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:038574c14fdda87b2eaf047b77b0140c817b1160aef9d75cb69cb821a4619d26"
+  digest = "1:f33053d007e0bb799e84b194fbcf9642e4d8a4cdaea4cd5d7742e5a093af2caa"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -38,6 +38,7 @@
     "private/protocol/restxml",
     "private/protocol/xml/xmlutil",
     "service/cloudfront",
+    "service/iam",
     "service/s3",
     "service/sts",
   ]
@@ -573,9 +574,9 @@
   analyzer-version = 1
   input-imports = [
     "github.com/aws/aws-sdk-go/aws",
-    "github.com/aws/aws-sdk-go/aws/awserr",
     "github.com/aws/aws-sdk-go/aws/session",
     "github.com/aws/aws-sdk-go/service/cloudfront",
+    "github.com/aws/aws-sdk-go/service/iam",
     "github.com/aws/aws-sdk-go/service/s3",
     "github.com/golang/glog",
     "github.com/lib/pq",
