@@ -10,11 +10,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
-
-	"cloudfront-broker/pkg/utils"
 )
 
-func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistributionSpec, out *CloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) createIAMUser(ctx context.Context, cf *cloudFrontInstanceSpec) error {
 	var err error
 	var iamIn *iam.CreateUserInput
 	// var iamOut *iam.CreateUserOutput
@@ -29,12 +27,12 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 
 	tags := []*iam.Tag{}
 	tags = append(tags, &iam.Tag{
-		Key:   utils.StrPtr("billingcode"),
-		Value: utils.StrPtr(in.BillingCode),
+		Key:   aws.String("billingcode"),
+		Value: cf.billingCode,
 	})
 
 	iamIn = &iam.CreateUserInput{
-		UserName: &in.BucketName,
+		UserName: cf.s3Bucket.name,
 		Tags:     tags,
 	}
 
@@ -45,9 +43,6 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 		klog.Error(msg)
 		return errors.New(msg)
 	}
-
-	out.IAMUser = iamOut.User.UserName
-	out.IAMArn = iamOut.User.Arn
 
 	giamIn := &iam.GetUserInput{
 		UserName: iamOut.User.UserName,
@@ -61,7 +56,7 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 	}
 
 	accessKeyInput := &iam.CreateAccessKeyInput{
-		UserName: out.IAMUser,
+		UserName: iamOut.User.UserName,
 	}
 
 	accessKeyOut, err := svc.CreateAccessKeyWithContext(ctx, accessKeyInput)
@@ -72,12 +67,12 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 		return errors.New(msg)
 	}
 
-	out.AccessKey = accessKeyOut.AccessKey.AccessKeyId
-	out.SecretKey = accessKeyOut.AccessKey.SecretAccessKey
-
-	// err = s.createIAMPolicy(ctx, in, out)
-
-	// TODO attach policy to user
+	cf.iAMUser = &iAMUserSpec{
+		userName:  iamOut.User.UserName,
+		arn:       iamOut.User.Arn,
+		accessKey: accessKeyOut.AccessKey.AccessKeyId,
+		secretKey: accessKeyOut.AccessKey.SecretAccessKey,
+	}
 
 	var policyIn *iam.PutUserPolicyInput
 	// var policyOut *iam.PutUserPolicyOutput
@@ -101,25 +96,25 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 				"Effect": "Allow",
 				"Action": "s3:*",
 				"Resource": []string{
-					fmt.Sprintf("arn:aws:s3:::%s", *out.S3Bucket.Name),
-					fmt.Sprintf("arn:aws:s3:::%s/*", *out.S3Bucket.Name),
+					fmt.Sprintf("arn:aws:s3:::%s", *cf.s3Bucket.name),
+					fmt.Sprintf("arn:aws:s3:::%s/*", *cf.s3Bucket.name),
 				},
 			},
 		},
 	})
 
-	out.PolicyName = aws.String(fmt.Sprintf("%s-policy", *out.S3Bucket.Name))
+	cf.iAMUser.policyName = aws.String(fmt.Sprintf("%s-policy", *cf.s3Bucket.name))
 
 	policyIn = &iam.PutUserPolicyInput{
-		PolicyName:     out.PolicyName,
+		PolicyName:     cf.iAMUser.policyName,
 		PolicyDocument: aws.String(string(userPolicy)),
-		UserName:       out.IAMUser,
+		UserName:       cf.iAMUser.userName,
 	}
 
 	_, err = svc.PutUserPolicyWithContext(ctx, policyIn)
 
 	if err != nil {
-		msg := fmt.Sprintf("error attaching polixy: %s", err.Error())
+		msg := fmt.Sprintf("error attaching policy: %s", err.Error())
 		klog.Error(msg)
 		return errors.New(msg)
 	}
@@ -127,10 +122,9 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, in *InCreateDistribut
 	return nil
 }
 
-func (s *AwsConfigSpec) createIAMPolicy(ctx context.Context, in *InCreateDistributionSpec, out *CloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) deleteIAMUser(ctx context.Context, cf *cloudFrontInstanceSpec) error {
 	var err error
-	var policyIn *iam.CreatePolicyInput
-	var policyOut *iam.CreatePolicyOutput
+
 	svc := iam.New(s.sess)
 	klog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
@@ -139,47 +133,43 @@ func (s *AwsConfigSpec) createIAMPolicy(ctx context.Context, in *InCreateDistrib
 		return errors.New(msg)
 	}
 
-	userPolicy, _ := json.Marshal(map[string]interface{}{
-		"Version": "2012-10-17",
-		"Statement": []map[string]interface{}{
-			{
-				"Sid":    "list",
-				"Effect": "Allow",
-				"Action": []string{
-					"s3:PutAccountPublicAccessBlock",
-					"s3:GetAccountPublicAccessBlock",
-					"s3:ListAllMyBuckets",
-					"s3:HeadBucket",
-				},
-				"Resource": "*",
-			},
-			{
-				"Sid":    "access",
-				"Effect": "Allow",
-				"Action": "s3:*",
-				"Resource": []string{
-					fmt.Sprintf("arn:aws:s3:::%s", *out.S3Bucket.Name),
-					fmt.Sprintf("arn:aws:s3:::%s/*", *out.S3Bucket.Name),
-				},
-			},
-		},
-	})
-
-	policyIn = &iam.CreatePolicyInput{
-		Description:    aws.String(fmt.Sprintf("Access to bucket %s", *out.S3Bucket.Name)),
-		PolicyName:     aws.String(fmt.Sprintf("%s-policy", *out.S3Bucket.Name)),
-		PolicyDocument: aws.String(string(userPolicy)),
+	delKeyInput := &iam.DeleteAccessKeyInput{
+		UserName:    cf.iAMUser.userName,
+		AccessKeyId: cf.iAMUser.accessKey,
 	}
 
-	policyOut, err = svc.CreatePolicyWithContext(ctx, policyIn)
+	klog.Infof("deleteing access key for: %s\n", *delKeyInput.UserName)
+	klog.Infof("deleting access key: %s", *delKeyInput.AccessKeyId)
 
+	_, err = svc.DeleteAccessKeyWithContext(ctx, delKeyInput)
 	if err != nil {
-		msg := fmt.Sprintf("error creating user policy: %s", err.Error())
+		msg := fmt.Sprintf("error deleting access key: %s", err.Error())
 		klog.Error(msg)
 		return errors.New(msg)
 	}
 
-	out.PolicyArn = policyOut.Policy.Arn
-	out.PolicyName = policyOut.Policy.PolicyName
+	delUserInput := &iam.DeleteUserInput{
+		UserName: cf.iAMUser.userName,
+	}
+
+	delUserPolicy := &iam.DeleteUserPolicyInput{
+		UserName:   cf.iAMUser.userName,
+		PolicyName: cf.iAMUser.policyName,
+	}
+
+	_, err = svc.DeleteUserPolicyWithContext(ctx, delUserPolicy)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting user policy: %s", err.Error())
+		klog.Error(msg)
+		return errors.New(msg)
+	}
+
+	_, err = svc.DeleteUserWithContext(ctx, delUserInput)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting iam user: %s", err.Error())
+		klog.Error(msg)
+		return errors.New(msg)
+	}
+
 	return nil
 }

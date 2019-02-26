@@ -14,31 +14,30 @@ type AwsConfigSpec struct {
 	sess       *session.Session
 }
 
-type InCreateDistributionSpec struct {
-	CallerReference string
-	BillingCode     string
-	Plan            string
-	BucketName      string
-	distChan        chan error
+type cloudFrontInstanceSpec struct {
+	instanceId           *string
+	billingCode          *string
+	plan                 *string
+	distributionID       *string
+	distributionURL      *string
+	callerReference      *string
+	originAccessIdentity *string
+	iAMUser              *iAMUserSpec
+	s3Bucket             *s3BucketSpec
+	distChan             chan error
 }
 
-type CloudFrontInstanceSpec struct {
-	DistributionID       *string
-	DistributionURL      *string
-	CallerReference      *string
-	OriginAccessIdentity *string
-	IAMUser              *string
-	IAMArn               *string
-	AccessKey            *string
-	SecretKey            *string
-	PolicyName           *string
-	PolicyArn            *string
-	S3Bucket             *S3BucketSpec
+type s3BucketSpec struct {
+	name     *string
+	fullname *string
+	uri      *string
+	id       *string
 }
 
-type S3BucketSpec struct {
-	Name     *string
-	Fullname *string
-	Uri      *string
-	ID       *string
+type iAMUserSpec struct {
+	userName   *string
+	arn        *string
+	accessKey  *string
+	secretKey  *string
+	policyName *string
 }

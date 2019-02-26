@@ -7,47 +7,47 @@ import (
 	"context"
 	"fmt"
 
-	"cloudfront-broker/pkg/utils"
-
 	"github.com/pkg/errors"
 	"k8s.io/klog"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 )
 
+const ttl int64 = 2592000
+
 func (s *AwsConfigSpec) CreateCloudFrontDistribution(ctx context.Context, callerReference string, billingCode string, plan string) (err error) {
 
-	in := &InCreateDistributionSpec{
-		CallerReference: callerReference,
-		BillingCode:     billingCode,
-		Plan:            plan,
+	cf := &cloudFrontInstanceSpec{
+		callerReference: aws.String(callerReference),
+		billingCode:     aws.String(billingCode),
+		plan:            aws.String(plan),
 	}
 
-	out := &CloudFrontInstanceSpec{}
-	out.CallerReference = &in.CallerReference
-
-	fmt.Printf("out: %+#v", out)
-	go s.createCloudFrontDistribution(ctx, in, out)
+	klog.Infof("out: %+#v", cf)
+	go s.createDistributionController(ctx, cf)
 
 	return nil
 }
 
-func (s *AwsConfigSpec) createCloudFrontDistribution(ctx context.Context, in *InCreateDistributionSpec, out *CloudFrontInstanceSpec) {
+func (s *AwsConfigSpec) createDistributionController(ctx context.Context, cf *cloudFrontInstanceSpec) {
 	var err error
-	in.distChan = make(chan error)
-	defer close(in.distChan)
+
+	cf.distChan = make(chan error)
+	defer close(cf.distChan)
 
 	// TODO create task in db
 
-	go s.createS3Bucket(ctx, in, out)
-	err = <-in.distChan
+	go s.createS3Bucket(ctx, cf)
+	err = <-cf.distChan
 
 	if err != nil {
 		klog.Errorf("error creating bucket: %s\n", err.Error())
 		return
 	}
 
-	err = s.createIAMUser(ctx, in, out)
+	err = s.createIAMUser(ctx, cf)
 
 	if err != nil {
 		msg := fmt.Sprintf("error creating iam user: %s", err.Error())
@@ -57,8 +57,8 @@ func (s *AwsConfigSpec) createCloudFrontDistribution(ctx context.Context, in *In
 	}
 
 	// originAccessIdentity
-	go s.createOriginAccessIdentity(ctx, in, out)
-	err = <-in.distChan
+	go s.createOriginAccessIdentity(ctx, cf)
+	err = <-cf.distChan
 
 	if err != nil {
 		msg := fmt.Sprintf("error creating OAI: %s\n", err.Error())
@@ -67,8 +67,8 @@ func (s *AwsConfigSpec) createCloudFrontDistribution(ctx context.Context, in *In
 		return
 	}
 
-	go s.createDistribution(ctx, in, out)
-	err = <-in.distChan
+	go s.createDistribution(ctx, cf)
+	err = <-cf.distChan
 
 	if err != nil {
 		msg := fmt.Sprintf("error creating distribution: %s", err.Error())
@@ -77,73 +77,43 @@ func (s *AwsConfigSpec) createCloudFrontDistribution(ctx context.Context, in *In
 		return
 	}
 
-	s.addBucketPolicy(ctx, in, out)
-	err = <-in.distChan
+	err = s.addBucketPolicy(ctx, cf)
+	// err = <-cf.distChan
 
 	if err != nil {
 		msg := fmt.Sprintf("error adding bucket policy: %s", err.Error())
 		klog.Error(msg)
-		in.distChan <- errors.New(msg)
+		// TODO write status to db
 		return
 	}
 
-	err = s.createIAMUser(ctx, in, out)
+	return
 }
 
-func (s *AwsConfigSpec) createOriginAccessIdentity(ctx context.Context, in *InCreateDistributionSpec, out *CloudFrontInstanceSpec) {
+func (s *AwsConfigSpec) createDistribution(ctx context.Context, cf *cloudFrontInstanceSpec) {
 	var err error
+	var cfOut *cloudfront.CreateDistributionWithTagsOutput
+	var ttlPtr *int64
 
-	svc := cloudfront.New(s.sess)
-	klog.Infof("cf sess: %#+v\n", svc)
-	if svc == nil {
-		msg := fmt.Sprint("error creating new cloudfront session")
-		klog.Error(msg)
-		in.distChan <- errors.New(msg)
-		return
-	}
-
-	originAccessIdentity, err := svc.CreateCloudFrontOriginAccessIdentityWithContext(ctx, &cloudfront.CreateCloudFrontOriginAccessIdentityInput{
-		CloudFrontOriginAccessIdentityConfig: &cloudfront.OriginAccessIdentityConfig{
-			CallerReference: &in.CallerReference,
-			Comment:         utils.StrPtr(in.BucketName),
-		},
-	})
-
-	if err != nil {
-		msg := fmt.Sprintf("error creating OriginAccessIdenity: %s", err.Error())
-		klog.Error(msg)
-		in.distChan <- errors.New(msg)
-		return
-	}
-
-	out.OriginAccessIdentity = originAccessIdentity.CloudFrontOriginAccessIdentity.Id
-
-	klog.Infof("oai id: %s\n", *out.OriginAccessIdentity)
-
-	in.distChan <- nil
-}
-
-func (s *AwsConfigSpec) createDistribution(ctx context.Context, in *InCreateDistributionSpec, out *CloudFrontInstanceSpec) {
-	var err error
-	var cfout *cloudfront.CreateDistributionWithTagsOutput
+	ttlPtr = aws.Int64(int64(ttl))
 
 	svc := cloudfront.New(s.sess)
 	klog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := fmt.Sprintf("error getting cloudfront session: %s", err.Error())
 		klog.Error(msg)
-		in.distChan <- errors.New(msg)
+		cf.distChan <- errors.New(msg)
 		return
 	}
 
-	fmt.Print("attach OAI")
+	klog.Info("attach origin access idenity")
 	var s3Origin = []*cloudfront.Origin{}
 
 	s3Origin = append(s3Origin, &cloudfront.Origin{
-		DomainName: out.S3Bucket.Fullname,
-		Id:         out.S3Bucket.ID,
+		DomainName: cf.s3Bucket.fullname,
+		Id:         cf.s3Bucket.id,
 		S3OriginConfig: &cloudfront.S3OriginConfig{
-			OriginAccessIdentity: utils.StrPtr("origin-access-identity/cloudfront/" + *out.OriginAccessIdentity),
+			OriginAccessIdentity: aws.String("origin-access-identity/cloudfront/" + *cf.originAccessIdentity),
 		},
 	})
 
@@ -151,55 +121,55 @@ func (s *AwsConfigSpec) createDistribution(ctx context.Context, in *InCreateDist
 	if err != nil {
 		msg := fmt.Sprintf("error in S3Origin: %s", err.Error())
 		klog.Errorf(msg)
-		in.distChan <- err
+		cf.distChan <- err
 		// TODO write update task with error
 	}
 
 	cmi := []*string{}
-	cmi = append(cmi, utils.StrPtr("GET"))
-	cmi = append(cmi, utils.StrPtr("HEAD"))
+	cmi = append(cmi, aws.String("GET"))
+	cmi = append(cmi, aws.String("HEAD"))
 
 	tags := []*cloudfront.Tag{}
 	tags = append(tags, &cloudfront.Tag{
-		Key:   utils.StrPtr("billingcode"),
-		Value: utils.StrPtr(in.BillingCode),
+		Key:   aws.String("billingcode"),
+		Value: (cf.billingCode),
 	})
 
 	cin := &cloudfront.CreateDistributionWithTagsInput{
 		DistributionConfigWithTags: &cloudfront.DistributionConfigWithTags{
 			DistributionConfig: &cloudfront.DistributionConfig{
-				CallerReference: &in.CallerReference,
+				CallerReference: cf.callerReference,
 				Origins: &cloudfront.Origins{
 					Items:    s3Origin,
-					Quantity: utils.OnePtr,
+					Quantity: aws.Int64(1),
 				},
-				Comment: out.S3Bucket.Name,
+				Comment: cf.s3Bucket.name,
 				DefaultCacheBehavior: &cloudfront.DefaultCacheBehavior{
 					AllowedMethods: &cloudfront.AllowedMethods{
 						CachedMethods: &cloudfront.CachedMethods{
 							Items:    cmi,
-							Quantity: utils.TwoPtr,
+							Quantity: aws.Int64(2),
 						},
 						Items:    cmi,
-						Quantity: utils.TwoPtr,
+						Quantity: aws.Int64(2),
 					},
-					DefaultTTL: utils.TtlPtr,
-					MinTTL:     utils.TtlPtr,
-					MaxTTL:     utils.TtlPtr,
+					DefaultTTL: ttlPtr,
+					MinTTL:     ttlPtr,
+					MaxTTL:     ttlPtr,
 					ForwardedValues: &cloudfront.ForwardedValues{
 						Cookies: &cloudfront.CookiePreference{
-							Forward: utils.StrPtr("none"),
+							Forward: aws.String("none"),
 						},
-						QueryString: utils.FalsePtr(),
+						QueryString: aws.Bool(false),
 					},
 					TargetOriginId: s3Origin[0].Id,
 					TrustedSigners: &cloudfront.TrustedSigners{
-						Enabled:  utils.FalsePtr(),
-						Quantity: utils.Int64Ptr(0),
+						Enabled:  aws.Bool(false),
+						Quantity: aws.Int64(0),
 					},
-					ViewerProtocolPolicy: utils.StrPtr("redirect-to-https"),
+					ViewerProtocolPolicy: aws.String("redirect-to-https"),
 				},
-				Enabled: utils.FalsePtr(),
+				Enabled: aws.Bool(true),
 			},
 			Tags: &cloudfront.Tags{
 				Items: tags,
@@ -211,30 +181,267 @@ func (s *AwsConfigSpec) createDistribution(ctx context.Context, in *InCreateDist
 	if err != nil {
 		msg := fmt.Sprintf("error with cin: %s", err.Error())
 		klog.Error(msg)
-		in.distChan <- errors.New(msg)
-	} else {
-		cfout, err = svc.CreateDistributionWithTagsWithContext(ctx, cin)
-		if err != nil {
-			msg := fmt.Sprintf("error creating distribution: %s", err.Error())
-			klog.Error(msg)
-			in.distChan <- errors.New(msg)
-			return
-		} else {
-			out.DistributionID = cfout.Distribution.Id
-			out.DistributionURL = cfout.Location
-
-			gdin := &cloudfront.GetDistributionInput{
-				Id: cfout.Distribution.Id,
-			}
-
-			err = svc.WaitUntilDistributionDeployedWithContext(ctx, gdin)
-			if err != nil {
-				msg := fmt.Sprintf("error creating distribution: %s", err.Error())
-				klog.Error(msg)
-				in.distChan <- errors.New(msg)
-				return
-			}
-		}
+		cf.distChan <- errors.New(msg)
+		return
 	}
-	in.distChan <- nil
+	cfOut, err = svc.CreateDistributionWithTagsWithContext(ctx, cin)
+
+	if err != nil {
+		msg := fmt.Sprintf("error creating distribution: %s", err.Error())
+		klog.Error(msg)
+		cf.distChan <- errors.New(msg)
+		return
+	}
+	cf.distributionID = cfOut.Distribution.Id
+	cf.distributionURL = cfOut.Location
+
+	err = svc.WaitUntilDistributionDeployedWithContext(ctx, &cloudfront.GetDistributionInput{Id: cfOut.Distribution.Id}, func(waiterIn *request.Waiter) {
+		waiterIn.MaxAttempts = 50
+	})
+
+	if err != nil {
+		msg := fmt.Sprintf("error creating distribution: %s", err.Error())
+		klog.Error(msg)
+		cf.distChan <- errors.New(msg)
+
+		return
+	}
+
+	cf.distChan <- nil
+}
+
+func (s *AwsConfigSpec) DeleteCloudFrontDistribution(ctx context.Context, callerReference string, id string) error {
+
+	cf := &cloudFrontInstanceSpec{
+		callerReference: aws.String(callerReference),
+		distributionID:  aws.String(id),
+	}
+
+	klog.Infof("out: %+#v", cf)
+
+	go s.deleteDistributionController(ctx, cf)
+
+	return nil
+}
+
+func (s *AwsConfigSpec) deleteDistributionController(ctx context.Context, cf *cloudFrontInstanceSpec) {
+	var err error
+
+	cf.distChan = make(chan error)
+	defer close(cf.distChan)
+
+	go s.disableDistribution(ctx, cf)
+	err = <-cf.distChan
+	if err != nil {
+		msg := fmt.Sprintf("error disabling distribution: %s", err)
+		klog.Error(msg)
+		// TODO write status to db
+		return
+	}
+
+	go s.deleteDistribution(ctx, cf)
+	err = <-cf.distChan
+	if err != nil {
+		msg := fmt.Sprintf("error deleting distribution: %s", err.Error())
+		klog.Error(msg)
+		// TODO write status to db
+		return
+	}
+
+	err = s.deleteOriginAccessIdentity(ctx, cf)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting origin access id: %s", err.Error())
+		klog.Error(msg)
+		// TODO write status to db
+		return
+	}
+
+	err = s.deleteS3Bucket(ctx, cf)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting bucket: %s", err.Error())
+		klog.Error(msg)
+		// TODO wraite status to db
+		return
+	}
+
+	err = s.deleteIAMUser(ctx, cf)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting user: %s", err.Error())
+		klog.Error(msg)
+		// TODO write status to db
+		return
+	}
+
+	return
+}
+
+func (s *AwsConfigSpec) getDistibutionConfig(ctx context.Context, svc *cloudfront.CloudFront, cf *cloudFrontInstanceSpec) (getDistConfOut *cloudfront.GetDistributionOutput, err error) {
+	var err error
+
+	getDistConfIn := &cloudfront.GetDistributionConfigInput{
+		Id: cf.distributionID,
+	}
+
+	getDistConfOut, err = svc.GetDistributionConfigWithContext(ctx, getDistConfIn)
+	if err != nil {
+		msg := fmt.Sprintf("error getting distribution config: %s", err.Error())
+		klog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	return getDistConfOut, nil
+}
+
+func (s AwsConfigSpec) deleteDistribution(ctx context.Context, cf *cloudFrontInstanceSpec) {
+	var err error
+
+	svc := cloudfront.New(s.sess)
+	klog.Infof("svc: %#+v\n", svc)
+	if svc == nil {
+		msg := fmt.Sprintf("error getting cloudfront session: %s", err.Error())
+		klog.Error(msg)
+		// TODO write status to db
+
+		cf.distChan <- err
+		return
+	}
+
+	getDistConfIn := &cloudfront.GetDistributionConfigInput{
+		Id: cf.distributionID,
+	}
+
+	getDistConfOut, err := svc.GetDistributionConfigWithContext(ctx, getDistConfIn)
+	if err != nil {
+		msg := fmt.Sprintf("error getting distribution config: %s", err.Error())
+		klog.Error(msg)
+		cf.distChan <- errors.New(msg)
+		return
+	}
+
+	delDistIn := &cloudfront.DeleteDistributionInput{
+		Id:      cf.distributionID,
+		IfMatch: getDistConfOut.ETag,
+	}
+
+	_, err = svc.DeleteDistributionWithContext(ctx, delDistIn)
+
+	cf.distChan <- err
+}
+
+func (s *AwsConfigSpec) updateDistributionEnableFlag(ctx context.Context, cf *cloudFrontInstanceSpec, enabled bool) error {
+	var err error
+
+	svc := cloudfront.New(s.sess)
+	klog.Infof("svc: %#+v\n", svc)
+	if svc == nil {
+		msg := fmt.Sprintf("error getting cloudfront session: %s", err.Error())
+		klog.Error(msg)
+		// TODO write status to db
+		return errors.New(msg)
+	}
+
+	getDistConfIn := &cloudfront.GetDistributionConfigInput{
+		Id: cf.distributionID,
+	}
+
+	getDistConfOut, err := svc.GetDistributionConfigWithContext(ctx, getDistConfIn)
+	if err != nil {
+		msg := fmt.Sprintf("error getting distribution config: %s", err.Error())
+		klog.Error(msg)
+		return errors.New(msg)
+	}
+
+	distributionConfigOut := &cloudfront.DistributionConfig{}
+
+	distributionConfigOut = getDistConfOut.DistributionConfig
+	distributionConfigOut.SetEnabled(enabled)
+
+	updateDistIn := &cloudfront.UpdateDistributionInput{
+		DistributionConfig: distributionConfigOut,
+		Id:                 cf.distributionID,
+		IfMatch:            getDistConfOut.ETag,
+	}
+
+	_, err = svc.UpdateDistributionWithContext(ctx, updateDistIn)
+
+	if err != nil {
+		msg := fmt.Sprintf("error enabling distribution: %s", err.Error())
+		klog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (s *AwsConfigSpec) enableDistribution(ctx context.Context, cf *cloudFrontInstanceSpec) {
+	cf.distChan <- s.updateDistributionEnableFlag(ctx, cf, true)
+}
+
+func (s *AwsConfigSpec) disableDistribution(ctx context.Context, cf *cloudFrontInstanceSpec) {
+	cf.distChan <- s.updateDistributionEnableFlag(ctx, cf, false)
+}
+
+func (s *AwsConfigSpec) createOriginAccessIdentity(ctx context.Context, cf *cloudFrontInstanceSpec) {
+	var err error
+
+	svc := cloudfront.New(s.sess)
+	klog.Infof("cf sess: %#+v\n", svc)
+	if svc == nil {
+		msg := fmt.Sprint("error creating new cloudfront session")
+		klog.Error(msg)
+		cf.distChan <- errors.New(msg)
+		return
+	}
+
+	originAccessIdentity, err := svc.CreateCloudFrontOriginAccessIdentityWithContext(ctx, &cloudfront.CreateCloudFrontOriginAccessIdentityInput{
+		CloudFrontOriginAccessIdentityConfig: &cloudfront.OriginAccessIdentityConfig{
+			CallerReference: cf.callerReference,
+			Comment:         aws.String(*cf.s3Bucket.name),
+		},
+	})
+
+	if err != nil {
+		msg := fmt.Sprintf("error creating OriginAccessIdenity: %s", err.Error())
+		klog.Error(msg)
+		cf.distChan <- errors.New(msg)
+		return
+	}
+
+	cf.originAccessIdentity = originAccessIdentity.CloudFrontOriginAccessIdentity.Id
+
+	klog.Infof("oai id: %s\n", *cf.originAccessIdentity)
+
+	cf.distChan <- nil
+}
+
+func (s *AwsConfigSpec) deleteOriginAccessIdentity(ctx context.Context, cf *cloudFrontInstanceSpec) error {
+	var err error
+
+	svc := cloudfront.New(s.sess)
+	klog.Infof("cf sess: %#+v\n", svc)
+	if svc == nil {
+		msg := fmt.Sprint("error creating new cloudfront session")
+		klog.Error(msg)
+		return err
+	}
+
+	gcfoaiIn := &cloudfront.GetCloudFrontOriginAccessIdentityInput{
+		Id: cf.originAccessIdentity,
+	}
+
+	gcfoaiOut, err := svc.GetCloudFrontOriginAccessIdentityWithContext(ctx, gcfoaiIn)
+
+	dcfoaiIn := &cloudfront.DeleteCloudFrontOriginAccessIdentityInput{
+		Id:      cf.originAccessIdentity,
+		IfMatch: gcfoaiOut.ETag,
+	}
+
+	_, err = svc.DeleteCloudFrontOriginAccessIdentityWithContext(ctx, dcfoaiIn)
+	if err != nil {
+		msg := fmt.Sprintf("error deleting origin access id: %s", err.Error())
+		klog.Error(msg)
+		return err
+	}
+
+	return nil
 }
