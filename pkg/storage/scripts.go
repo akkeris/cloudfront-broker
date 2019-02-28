@@ -29,6 +29,23 @@ from plans join services on services.service = plans.service
 where services.deleted = false and plans.deleted = false
 `
 
+const taskQuery string = `
+select
+  task.task,
+  task.distributionId,
+  task.action,
+  task.status,
+  task.retries,
+  task.metadata,
+  task.result,
+  task.created,
+  task.updated,
+  task.started,
+  task.finished
+from tasks join distributions on distributions.Id = task.distributionId
+where distributions.deleted = false and tasks.deleted = false
+`
+
 const createScript string = `
 DO
 $$
@@ -169,9 +186,9 @@ FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
 CREATE TABLE IF NOT EXISTS tasks
 (
 task     uuid                                          NOT NULL PRIMARY KEY,
-distributions varchar(1024) REFERENCES distributions ("id") NOT NULL,
+distributionId varchar(1024) REFERENCES distributions ("id") NOT NULL,
 action   varchar(1024)                                 NOT NULL,
-status   task_status                                   NOT NULL DEFAULT 'pending',
+status   task_status                                   NOT NULL DEFAULT 'in progess',
 retries  int                                           NOT NULL DEFAULT 0,
 metadata text                                          NOT NULL DEFAULT '',
 result   text                                          NOT NULL DEFAULT '',

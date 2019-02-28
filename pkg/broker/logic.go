@@ -3,14 +3,16 @@ package broker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
-	"k8s.io/klog"
 
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	"github.com/pmorie/osb-broker-lib/pkg/broker"
@@ -19,14 +21,10 @@ import (
 	"cloudfront-broker/pkg/storage"
 )
 
-// BusinessLogic provides an implementation of the broker.BusinessLogic
-// interface.
 type BusinessLogic struct {
-	// Indicates if the broker should handle the requests asynchronously.
 	async bool
-	// Synchronize go routines.
 	sync.RWMutex
-	// Add fields here! These fields are provided purely as an example
+
 	dbStore    *storage.PostgresStorage
 	service    *service.AwsConfigSpec
 	namePrefix string
@@ -35,48 +33,75 @@ type BusinessLogic struct {
 	instances map[string]*storage.InstanceSpec
 }
 
-// NewBusinessLogic is a hook that is called with the Options the program is run
-// with. NewBusinessLogic is the place where you will initialize your
-// BusinessLogic the parameters passed in.
-func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
-	// For example, if your BusinessLogic requires a parameter from the command
-	// line, you would unpack it from the Options and set it on the
-	// BusinessLogic here.
+var _ broker.Interface = &BusinessLogic{}
 
-	dbStore, namePrefix, err := InitFromOptions(ctx, o)
+func newOpKey(prefix string) string {
+	newUuid, _ := uuid.NewV4()
+	return prefix + strings.Split(newUuid.String(), "-")[0]
+}
+
+func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
+	dbStore, namePrefix, waitCnt, waitSecs, err := InitFromOptions(ctx, o)
 
 	if err != nil {
-		klog.Errorf("error initializing: %s", err.Error())
+		glog.Errorf("error initializing: %s", err.Error())
 		return nil, errors.New("error initializing" + ": " + err.Error())
 	}
 
-	awsConfig, err := service.Init(namePrefix)
+	awsConfig, err := service.Init(namePrefix, waitCnt, waitSecs)
+	if err != nil {
+		msg := fmt.Sprintf("error initializing the service: %s\n", err)
+		glog.Fatalln(msg)
+	}
 
-	klog.Infof("namePrefix=%s", namePrefix)
+	glog.Infof("namePrefix=%s", namePrefix)
 
 	return &BusinessLogic{
 		async:      o.Async,
 		dbStore:    dbStore,
 		service:    awsConfig,
 		namePrefix: namePrefix,
-		instances:  make(map[string]*storage.InstanceSpec, 10),
+
+		instances: make(map[string]*storage.InstanceSpec, 10),
 	}, nil
 }
 
-func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, string, error) {
-	klog.Infof("options: %#+v", o)
-	if o.NamePrefix == "" && os.Getenv("NAME_PREFIX") != "" {
-		o.NamePrefix = os.Getenv("NAME_PREFIX")
+func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, string, int, time.Duration, error) {
+
+	var err error
+	namePrefix := o.NamePrefix
+	var waitCnt int = o.WaitCnt
+	var waitSecs time.Duration = time.Duration(o.WaitSecs)
+
+	glog.Infof("options: %#+v", o)
+
+	if namePrefix == "" && os.Getenv("NAME_PREFIX") != "" {
+		namePrefix = os.Getenv("NAME_PREFIX")
 	}
-	if o.NamePrefix == "" {
-		return nil, "", errors.New("the name prefix was not specified, set NAME_PREFIX in your environment or provide it via the cli using -name-prefix")
+
+	if namePrefix == "" {
+		return nil, "", 0, 0, errors.New("the name prefix was not specified, set NAME_PREFIX in your environment or provide it via the cli using -name-prefix")
+	}
+
+	if os.Getenv("WAIT_COUNT") != "" {
+		c, err := strconv.Atoi(os.Getenv("WAIT_COUNT"))
+		if err != nil {
+			return nil, "", 0, 0, errors.New("Invalid value for WAIT_COUNT")
+		}
+		waitCnt = c
+	}
+
+	if os.Getenv("WAIT_SECONDS") != "" {
+		s, err := strconv.Atoi(os.Getenv("WAIT_SECONDS"))
+		if err != nil {
+			return nil, "", 0, 0, errors.New("Invalid value for WAIT_SECONDS")
+		}
+		waitSecs = time.Duration(s)
 	}
 
 	stg, err := storage.InitStorage(ctx, o.DatabaseUrl)
-	return stg, o.NamePrefix, err
+	return stg, namePrefix, waitCnt, waitSecs, err
 }
-
-var _ broker.Interface = &BusinessLogic{}
 
 func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {
 	var err error
@@ -100,12 +125,8 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 }
 
 func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.RequestContext) (*broker.ProvisionResponse, error) {
-	var ctx aws.Context
 	b.Lock()
 	defer b.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	response := broker.ProvisionResponse{}
 
@@ -117,10 +138,18 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
+	newUuid, _ := uuid.NewV4()
+	callerReference := newUuid.String()
+
+	operationKey := newOpKey("PRV")
+	respOpKey := osb.OperationKey(operationKey)
+	response.OperationKey = &respOpKey
+
 	newInstance := &storage.InstanceSpec{
-		ID:        request.InstanceID,
-		ServiceID: request.ServiceID,
-		PlanID:    request.PlanID,
+		ID:           request.InstanceID,
+		ServiceId:    request.ServiceID,
+		PlanId:       request.PlanID,
+		OperationKey: operationKey,
 	}
 
 	// Check to see if this is the same instance
@@ -136,13 +165,9 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 	}
 	b.instances[request.InstanceID] = newInstance
 
-	newUuid, _ := uuid.NewV4()
-	callerReference := newUuid.String()
-
-	err := b.service.CreateCloudFrontDistribution(ctx, callerReference, newInstance.BillingCode, newInstance.PlanID)
-
+	err := b.service.CreateCloudFrontDistribution(callerReference, newInstance)
 	if err != nil {
-		return nil, UnprocessableEntityWithMessage(err.Error(), "problem creating distribution")
+		return nil, InternalServerErr()
 	}
 
 	return &response, nil
@@ -151,9 +176,6 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.RequestContext) (*broker.DeprovisionResponse, error) {
 	b.Lock()
 	defer b.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	response := broker.DeprovisionResponse{}
 
@@ -168,11 +190,22 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
-	ok := osb.OperationKey(callerReference)
-	response.OperationKey = &ok
+	operationKey := newOpKey("DPV")
+	respOpKey := osb.OperationKey(operationKey)
+	response.OperationKey = &respOpKey
 	response.Async = b.async
 
-	b.service.DeleteCloudFrontDistribution(ctx, callerReference, request.InstanceID)
+	oldInstance := &storage.InstanceSpec{
+		ID:           request.InstanceID,
+		ServiceId:    request.ServiceID,
+		PlanId:       request.PlanID,
+		OperationKey: operationKey,
+	}
+
+	err := b.service.DeleteCloudFrontDistribution(callerReference, oldInstance)
+	if err != nil {
+		return nil, InternalServerErr()
+	}
 
 	delete(b.instances, request.InstanceID)
 
@@ -180,9 +213,39 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 }
 
 func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *broker.RequestContext) (*broker.LastOperationResponse, error) {
-	// Your last-operation business logic goes here
+	b.Lock()
+	defer b.Unlock()
 
-	return nil, nil
+	response := broker.LastOperationResponse{}
+
+	/*
+	  if *request.OperationKey == "" {
+	    return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
+	  }
+	*/
+
+	if request.InstanceID == "" {
+		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
+	}
+
+	// opKey := string(*request.OperationKey)
+
+	instance := &storage.InstanceSpec{
+		ID: request.InstanceID,
+	}
+
+	status, err := b.service.CheckLastOperation(instance)
+
+	if err != nil {
+		msg := fmt.Sprintf("error checking last operation for %s: %s", instance.ID, err)
+		glog.Error(msg)
+		return nil, InternalServerErrWithMessage("InternalServerError", "server error when checking status of last operation")
+	}
+
+	response.State = osb.LastOperationState(*status.Status)
+	response.Description = status.Description
+
+	return &response, nil
 }
 
 func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext) (*broker.BindResponse, error) {
@@ -192,24 +255,24 @@ func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext)
 	var response broker.BindResponse
 
 	/*
-	  b.Lock()
-	  defer b.Unlock()
+	   b.Lock()
+	   defer b.Unlock()
 
-	  instance, ok := b.instances[request.InstanceID]
-	  if !ok {
-	    return nil, osb.HTTPStatusCodeError{
-	      StatusCode: http.StatusNotFound,
-	    }
-	  }
+	   instance, ok := b.instances[request.InstanceID]
+	   if !ok {
+	     return nil, osb.HTTPStatusCodeError{
+	       StatusCode: http.StatusNotFound,
+	     }
+	   }
 
-	  response := broker.BindResponse{
-	    BindResponse: osb.BindResponse{
-	      Credentials: instance.Params,
-	    },
-	  }
-	  if request.AcceptsIncomplete {
-	    response.Async = b.async
-	  }
+	   response := broker.BindResponse{
+	     BindResponse: osb.BindResponse{
+	       Credentials: instance.Params,
+	     },
+	   }
+	   if request.AcceptsIncomplete {
+	     response.Async = b.async
+	   }
 	*/
 
 	return &response, nil

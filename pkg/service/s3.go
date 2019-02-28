@@ -4,14 +4,13 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
-	"k8s.io/klog"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -26,13 +25,14 @@ func (s *AwsConfigSpec) genBucketName() *string {
 	return &bucketName
 }
 
-func (s *AwsConfigSpec) createS3Bucket(ctx context.Context, cf *cloudFrontInstanceSpec) {
+func (s *AwsConfigSpec) createS3Bucket(cf *cloudFrontInstanceSpec) {
 
+	glog.Infof("==== createS3Bucket [%s] ====", *cf.operationKey)
 	svc := s3.New(s.sess)
-	klog.Infof("\nsvc: %#+v\n", svc)
+	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := "error getting s3 session"
-		klog.Errorf(msg)
+		glog.Errorf(msg)
 		cf.distChan <- errors.New(msg)
 	}
 
@@ -43,10 +43,9 @@ func (s *AwsConfigSpec) createS3Bucket(ctx context.Context, cf *cloudFrontInstan
 	}
 
 	s3out, err := svc.CreateBucket(s3in)
-	klog.Infof("\ns3out: %#+v\n", s3out)
 	if err != nil {
 		msg := fmt.Sprintf("error creating s3 bucket: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		cf.distChan <- errors.New(msg)
 		return
 	}
@@ -54,16 +53,17 @@ func (s *AwsConfigSpec) createS3Bucket(ctx context.Context, cf *cloudFrontInstan
 	fullname := strings.Replace(*s3out.Location, "http://", "", -1)
 	fullname = strings.Replace(fullname, "/", "", -1)
 
-	fmt.Printf("\nbucket name: %s", *bucketName)
+	glog.Infof("bucket name: %s\n", *bucketName)
 
 	headBucketIn := &s3.HeadBucketInput{
 		Bucket: bucketName,
 	}
 
-	err = svc.WaitUntilBucketExistsWithContext(ctx, headBucketIn)
+	glog.Info(">>>> waiting for distribution <<<<")
+	err = svc.WaitUntilBucketExists(headBucketIn)
 
 	if err != nil {
-		fmt.Printf("error waiting for bucket %s: %s\n", *bucketName, err.Error())
+		glog.Errorf("error waiting for bucket %s: %s\n", *bucketName, err.Error())
 		cf.distChan <- err
 		return
 	}
@@ -78,11 +78,12 @@ func (s *AwsConfigSpec) createS3Bucket(ctx context.Context, cf *cloudFrontInstan
 	cf.distChan <- nil
 }
 
-func (s *AwsConfigSpec) addBucketPolicy(ctx context.Context, cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) addBucketPolicy(cf *cloudFrontInstanceSpec) error {
+	glog.Infof("==== addBucketPolicy [%s] ====", *cf.operationKey)
 
 	policy, _ := json.Marshal(map[string]interface{}{
 		"Version": "2012-10-17",
-		"Id":      fmt.Sprintf("Policy%s", *cf.distributionID),
+		"Id":      fmt.Sprintf("Policy%s", *cf.distributionId),
 		"Statement": []map[string]interface{}{
 			{
 				"Sid":    fmt.Sprintf("Stmt%s", *cf.originAccessIdentity),
@@ -96,23 +97,14 @@ func (s *AwsConfigSpec) addBucketPolicy(ctx context.Context, cf *cloudFrontInsta
 		},
 	})
 
-	klog.Infof("\nbucket policy: %s\n", policy)
+	glog.Infof("\nbucket policy: %s\n", policy)
 	svc := s3.New(s.sess)
-	klog.Infof("\nsvc: %#+v\n", svc)
+	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := "error getting s3 session"
-		klog.Error(msg)
-		// cf.distChan <- errors.New(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
-
-	/*
-		bucketPolicyInput := &s3.PutBucketPolicyInput{
-			Bucket: cf.s3Bucket.name,
-			Policy: aws.String(string(policy)),
-		}
-		klog.Infof("\nbpIn: %#+v\n", bucketPolicyInput)
-	*/
 
 	_, err := svc.PutBucketPolicy(&s3.PutBucketPolicyInput{
 		Bucket: cf.s3Bucket.name,
@@ -121,16 +113,16 @@ func (s *AwsConfigSpec) addBucketPolicy(ctx context.Context, cf *cloudFrontInsta
 
 	if err != nil {
 		msg := fmt.Sprintf("error adding bucketpolicy to %s: %s", *cf.s3Bucket.name, err.Error())
-		klog.Errorf(msg)
-		// cf.distChan <- errors.New(msg)
+		glog.Errorf(msg)
 		return errors.New(msg)
 	}
 
-	// cf.distChan <- nil
 	return nil
 }
 
-func (s *AwsConfigSpec) deleteS3Bucket(ctx context.Context, cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) deleteS3Bucket(cf *cloudFrontInstanceSpec) error {
+	glog.Infof("==== deleteS3Bucket [%s] ====", *cf.operationKey)
+
 	svc := s3.New(s.sess)
 
 	input := &s3.DeleteBucketInput{
@@ -139,14 +131,14 @@ func (s *AwsConfigSpec) deleteS3Bucket(ctx context.Context, cf *cloudFrontInstan
 
 	err := input.Validate()
 	if err != nil {
-		klog.Errorf("error validating delete bucket input: %s\n", err)
+		glog.Errorf("error validating delete bucket input: %s\n", err)
 		return err
 	}
 
 	_, err = svc.DeleteBucket(input)
 
 	if err != nil {
-		klog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
+		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
 		return err
 	}
 
@@ -154,10 +146,10 @@ func (s *AwsConfigSpec) deleteS3Bucket(ctx context.Context, cf *cloudFrontInstan
 		Bucket: cf.s3Bucket.name,
 	}
 
-	err = svc.WaitUntilBucketNotExistsWithContext(ctx, waitIn)
+	err = svc.WaitUntilBucketNotExists(waitIn)
 
 	if err != nil {
-		klog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
+		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
 		return err
 	}
 

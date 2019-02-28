@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 
-	"k8s.io/klog"
+	"github.com/golang/glog"
 
 	_ "github.com/lib/pq"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
@@ -57,15 +57,15 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 	}
 
 	if DatabaseUrl == "" {
-		klog.Error("Unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option.")
+		glog.Error("Unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option.")
 		return nil, errors.New("unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option")
 	}
 
-	klog.Infof("DATABASE_URL=%s", DatabaseUrl)
+	glog.Infof("DATABASE_URL=%s", DatabaseUrl)
 
 	db, err := sql.Open("postgres", DatabaseUrl)
 	if err != nil {
-		klog.Errorf("Unable to open database: %s\n", err.Error())
+		glog.Errorf("Unable to open database: %s\n", err.Error())
 		return nil, errors.New("Unable to open database: " + err.Error())
 	}
 
@@ -77,7 +77,7 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 
 	_, err = db.Exec(createScript)
 	if err != nil {
-		klog.Errorf("error creating database tables: %s\n", err)
+		glog.Errorf("error creating database tables: %s\n", err)
 		return nil, err
 	}
 
@@ -87,7 +87,7 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 	if err != nil || cnt == 0 {
 		_, err = db.Exec(initServicesScript)
 		if err != nil {
-			klog.Errorf("error initializing services: %s\n", err)
+			glog.Errorf("error initializing services: %s\n", err)
 			return nil, err
 		}
 	}
@@ -96,7 +96,7 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 	if err != nil || cnt == 0 {
 		_, err = db.Exec(initPlansScript)
 		if err != nil {
-			klog.Errorf("error initializing plans: %s\n", err)
+			glog.Errorf("error initializing plans: %s\n", err)
 			return nil, err
 		}
 	}
@@ -107,7 +107,7 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 func (p *PostgresStorage) getPlans(subquery string, arg string) ([]PlanSpec, error) {
 	rows, err := p.db.Query(plansQuery+subquery, arg)
 	if err != nil {
-		klog.Errorf("getPlans query failed: %s\n", err.Error())
+		glog.Errorf("getPlans query failed: %s\n", err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -121,7 +121,7 @@ func (p *PostgresStorage) getPlans(subquery string, arg string) ([]PlanSpec, err
 
 		err := rows.Scan(&id, &name, &serviceName, &humanName, &description, &categories, &free, &cents, &costUnit, &beta, &depreciated)
 		if err != nil {
-			klog.Errorf("Scan from plans query failed: %s\n", err.Error())
+			glog.Errorf("Scan from plans query failed: %s\n", err.Error())
 			return nil, errors.New("Scan from plans query failed: " + err.Error())
 		}
 
@@ -171,13 +171,13 @@ func (p *PostgresStorage) GetServices() ([]osb.Service, error) {
 		var beta, deprecated bool
 		err = rows.Scan(&service_id, &service_name, &service_human_name, &service_description, &service_categories, &service_image, &beta, &deprecated)
 		if err != nil {
-			klog.Errorf("Unable to get services: %s\n", err.Error())
+			glog.Errorf("Unable to get services: %s\n", err.Error())
 			return nil, errors.New("Unable to get services: " + err.Error())
 		}
 
 		plans, err := p.GetPlans(service_id)
 		if err != nil {
-			klog.Errorf("Unable to get plans for %s: %s\n", service_name, err.Error())
+			glog.Errorf("Unable to get plans for %s: %s\n", service_name, err.Error())
 			return nil, errors.New("Unable to get plans for " + service_name + ": " + err.Error())
 		}
 

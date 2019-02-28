@@ -1,27 +1,26 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"k8s.io/klog"
+	"github.com/golang/glog"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
 )
 
-func (s *AwsConfigSpec) createIAMUser(ctx context.Context, cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) createIAMUser(cf *cloudFrontInstanceSpec) error {
 	var err error
 	var iamIn *iam.CreateUserInput
-	// var iamOut *iam.CreateUserOutput
+
+	glog.Infof("==== createIAMUser [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
-	klog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := fmt.Sprintf("error getting iam session: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -36,11 +35,11 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, cf *cloudFrontInstanc
 		Tags:     tags,
 	}
 
-	iamOut, err := svc.CreateUserWithContext(ctx, iamIn)
+	iamOut, err := svc.CreateUser(iamIn)
 
 	if err != nil {
 		msg := fmt.Sprintf("error creating iam user: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -48,25 +47,28 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, cf *cloudFrontInstanc
 		UserName: iamOut.User.UserName,
 	}
 
-	err = svc.WaitUntilUserExistsWithContext(ctx, giamIn)
+	err = svc.WaitUntilUserExists(giamIn)
 	if err != nil {
 		msg := fmt.Sprintf("error waiting for iam user: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
+
+	glog.Infof("iam username: %s", *giamIn.UserName)
 
 	accessKeyInput := &iam.CreateAccessKeyInput{
 		UserName: iamOut.User.UserName,
 	}
 
-	accessKeyOut, err := svc.CreateAccessKeyWithContext(ctx, accessKeyInput)
+	accessKeyOut, err := svc.CreateAccessKey(accessKeyInput)
 
 	if err != nil {
 		msg := fmt.Sprintf("error creating access key: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
+	glog.Infof("access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
 	cf.iAMUser = &iAMUserSpec{
 		userName:  iamOut.User.UserName,
 		arn:       iamOut.User.Arn,
@@ -111,25 +113,27 @@ func (s *AwsConfigSpec) createIAMUser(ctx context.Context, cf *cloudFrontInstanc
 		UserName:       cf.iAMUser.userName,
 	}
 
-	_, err = svc.PutUserPolicyWithContext(ctx, policyIn)
+	_, err = svc.PutUserPolicy(policyIn)
 
 	if err != nil {
 		msg := fmt.Sprintf("error attaching policy: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
 	return nil
 }
 
-func (s *AwsConfigSpec) deleteIAMUser(ctx context.Context, cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfigSpec) deleteIAMUser(cf *cloudFrontInstanceSpec) error {
 	var err error
 
+	glog.Info("==== deleteIAMUser ====")
+
 	svc := iam.New(s.sess)
-	klog.Infof("svc: %#+v\n", svc)
+	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := fmt.Sprintf("error getting iam session: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -138,13 +142,13 @@ func (s *AwsConfigSpec) deleteIAMUser(ctx context.Context, cf *cloudFrontInstanc
 		AccessKeyId: cf.iAMUser.accessKey,
 	}
 
-	klog.Infof("deleteing access key for: %s\n", *delKeyInput.UserName)
-	klog.Infof("deleting access key: %s", *delKeyInput.AccessKeyId)
+	glog.Infof("deleteing access key for: %s\n", *delKeyInput.UserName)
+	glog.Infof("deleting access key: %s", *delKeyInput.AccessKeyId)
 
-	_, err = svc.DeleteAccessKeyWithContext(ctx, delKeyInput)
+	_, err = svc.DeleteAccessKey(delKeyInput)
 	if err != nil {
 		msg := fmt.Sprintf("error deleting access key: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -157,17 +161,17 @@ func (s *AwsConfigSpec) deleteIAMUser(ctx context.Context, cf *cloudFrontInstanc
 		PolicyName: cf.iAMUser.policyName,
 	}
 
-	_, err = svc.DeleteUserPolicyWithContext(ctx, delUserPolicy)
+	_, err = svc.DeleteUserPolicy(delUserPolicy)
 	if err != nil {
 		msg := fmt.Sprintf("error deleting user policy: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 
-	_, err = svc.DeleteUserWithContext(ctx, delUserInput)
+	_, err = svc.DeleteUser(delUserInput)
 	if err != nil {
 		msg := fmt.Sprintf("error deleting iam user: %s", err.Error())
-		klog.Error(msg)
+		glog.Error(msg)
 		return errors.New(msg)
 	}
 

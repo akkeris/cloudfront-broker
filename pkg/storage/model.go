@@ -4,6 +4,8 @@
 package storage
 
 import (
+	"time"
+
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
@@ -45,9 +47,9 @@ type OriginSpec struct {
 
 type InstanceSpec struct {
 	ID              string       `json:"id"`
-	ServiceID       string       `json:"service_id"`
-	PlanID          string       `json:"plan_id"`
-	CloudfrontID    string       `json:"cloudfront_id"`
+	ServiceId       string       `json:"service_id"`
+	PlanId          string       `json:"plan_id"`
+	CloudfrontId    string       `json:"cloudfront_id"`
 	DistributionUrl string       `json:"distribution_url"`
 	BillingCode     string       `json:"billing_code"`
 	Origins         []OriginSpec `json:"origins"`
@@ -59,4 +61,19 @@ type InstanceSpec struct {
 	Beta            bool         `json:"beta"`
 	Depreciated     bool         `json:"depreciated"`
 	Deleted         bool         `json:"deleted"`
+	OperationKey    string
+}
+
+type TaskSpec struct {
+	TaskId         string
+	DistributionId string
+	Action         string
+	Status         string
+	Retries        int
+	Result         string
+	Created        time.Time
+	Updated        time.Time
+	Started        time.Time
+	Finished       time.Time
+	Deleted        bool
 }

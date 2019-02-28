@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -22,13 +21,11 @@ func TestCloudFrontService(t *testing.T) {
 		in = &cloudFrontInstanceSpec{
 			billingCode:     &devTesting,
 			callerReference: &sUuid,
-			plan:            &dist,
+			planId:          &dist,
 			distChan:        make(chan error),
 		}
 
-		ctx, _ := context.WithCancel(context.Background())
-
-		c, err = Init(os.Getenv("NAME_PREFIX"))
+		c, err = Init(os.Getenv("NAME_PREFIX"), 10, 150)
 
 		So(c, ShouldNotBeNil)
 		So(err, ShouldBeNil)
@@ -38,7 +35,7 @@ func TestCloudFrontService(t *testing.T) {
 		Printf("conf: %s\n", *c.conf.Region)
 
 		Convey("create s3 bucket", func() {
-			go c.createS3Bucket(ctx, in)
+			go c.createS3Bucket(in)
 			err = <-in.distChan
 
 			So(err, ShouldBeNil)
@@ -51,7 +48,7 @@ func TestCloudFrontService(t *testing.T) {
 			Printf("s3 id: %s\n", *in.s3Bucket.id)
 
 			Convey("create iam user", func() {
-				err = c.createIAMUser(ctx, in)
+				err = c.createIAMUser(in)
 
 				So(err, ShouldBeNil)
 				So(in.iAMUser, ShouldNotBeNil)
@@ -64,7 +61,7 @@ func TestCloudFrontService(t *testing.T) {
 				Printf("policy name: %s\n", *in.iAMUser.policyName)
 
 				Convey("create origin access idenity", func() {
-					go c.createOriginAccessIdentity(ctx, in)
+					go c.createOriginAccessIdentity(in)
 					err = <-in.distChan
 
 					So(err, ShouldBeNil)
@@ -74,37 +71,62 @@ func TestCloudFrontService(t *testing.T) {
 					Printf("\noai: %s\n", *in.originAccessIdentity)
 
 					Convey("create cloudfront distribution", func() {
-						go c.createDistribution(ctx, in)
+						go c.createDistribution(in)
 						err = <-in.distChan
 
 						So(err, ShouldBeNil)
-						So(in.distributionID, ShouldNotBeNil)
-						So(*in.distributionID, ShouldNotBeBlank)
+						So(in.distributionId, ShouldNotBeNil)
+						So(*in.distributionId, ShouldNotBeBlank)
 
-						Printf("\ndistribution id: %s\n", *in.distributionID)
+						Printf("\ndistribution id: %s\n", *in.distributionId)
 
 						Convey("add bucket policy", func() {
-							err = c.addBucketPolicy(ctx, in)
+							err = c.addBucketPolicy(in)
 							// err = <-in.distChan
 
 							So(err, ShouldBeNil)
 
 							Println("bucket policy added?")
 
-							Convey("disable distribution", func() {
-								go c.disableDistribution(ctx, in)
-								err = <-in.distChan
+							Convey("delete bucket", func() {
+								err = c.deleteS3Bucket(in)
 
 								So(err, ShouldBeNil)
 
-								Println("distribution disabled")
+								Println("bucket deleted?")
 
-								Convey("delete distribution", func() {
-									go c.deleteDistribution(ctx, in)
-									err = <-in.distChan
+								Convey("delete iam user", func() {
+
+									err = c.deleteIAMUser(in)
 
 									So(err, ShouldBeNil)
-									Println("distribution Deleted")
+
+									Println("iam user deleted")
+
+									Convey("disable distribution", func() {
+										err = c.disableDistribution(in)
+
+										So(err, ShouldBeNil)
+
+										Println("distribution disabled")
+
+										Convey("delete distribution", func() {
+											go c.deleteDistribution(in)
+											err = <-in.distChan
+
+											So(err, ShouldBeNil)
+
+											Println("distribution Deleted")
+
+											Convey("delete origin access id", func() {
+												err = c.deleteOriginAccessIdentity(in)
+
+												So(err, ShouldBeNil)
+
+												Println("origin access id deleted")
+											})
+										})
+									})
 								})
 							})
 						})
