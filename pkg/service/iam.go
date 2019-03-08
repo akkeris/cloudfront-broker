@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 )
 
-func (s *AwsConfigSpec) createIAMUser(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 	var err error
 	var iamIn *iam.CreateUserInput
 
@@ -69,7 +69,7 @@ func (s *AwsConfigSpec) createIAMUser(cf *cloudFrontInstanceSpec) error {
 	}
 
 	glog.Infof("access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
-	cf.iAMUser = &iAMUserSpec{
+	cf.iAMUser = &iAMUser{
 		userName:  iamOut.User.UserName,
 		arn:       iamOut.User.Arn,
 		accessKey: accessKeyOut.AccessKey.AccessKeyId,
@@ -124,7 +124,7 @@ func (s *AwsConfigSpec) createIAMUser(cf *cloudFrontInstanceSpec) error {
 	return nil
 }
 
-func (s *AwsConfigSpec) deleteIAMUser(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 	var err error
 
 	glog.Info("==== deleteIAMUser ====")

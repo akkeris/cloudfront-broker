@@ -14,8 +14,8 @@ import (
 	"github.com/golang/glog"
 )
 
-func Init(namePrefix string, waitCnt int, waitSecs time.Duration) (*AwsConfigSpec, error) {
-	c := AwsConfigSpec{
+func Init(namePrefix string, waitCnt int, waitSecs time.Duration) (*AwsConfig, error) {
+	c := AwsConfig{
 		namePrefix: namePrefix,
 		waitCnt:    waitCnt,
 		waitSecs:   waitSecs,
@@ -56,11 +56,11 @@ func Init(namePrefix string, waitCnt int, waitSecs time.Duration) (*AwsConfigSpe
 func statusMsg(status string, process string) string {
 	var msg string
 	switch status {
-	case StateInProgress:
+	case OperationInProgress:
 		msg = fmt.Sprintf("%s is in progess", process)
-	case StateSucceeded:
+	case OperationSucceeded:
 		msg = fmt.Sprintf("%s has completed successfully", process)
-	case StateFailed:
+	case OperationFailed:
 		msg = fmt.Sprintf("%s has failed", process)
 	default:
 		msg = fmt.Sprintf("%s status unknown", process)

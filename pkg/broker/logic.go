@@ -13,7 +13,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
-
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	"github.com/pmorie/osb-broker-lib/pkg/broker"
 
@@ -25,12 +24,12 @@ type BusinessLogic struct {
 	async bool
 	sync.RWMutex
 
-	dbStore    *storage.PostgresStorage
-	service    *service.AwsConfigSpec
+	storage    *storage.PostgresStorage
+	service    *service.AwsConfig
 	namePrefix string
 	port       string
 
-	instances map[string]*storage.InstanceSpec
+	instances map[string]*storage.Distribution
 }
 
 var _ broker.Interface = &BusinessLogic{}
@@ -58,11 +57,11 @@ func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 
 	return &BusinessLogic{
 		async:      o.Async,
-		dbStore:    dbStore,
+		storage:    dbStore,
 		service:    awsConfig,
 		namePrefix: namePrefix,
 
-		instances: make(map[string]*storage.InstanceSpec, 10),
+		instances: make(map[string]*storage.Distribution, 10),
 	}, nil
 }
 
@@ -108,7 +107,8 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 
 	response := &broker.CatalogResponse{}
 	osbResponse := &osb.CatalogResponse{}
-	osbResponse.Services, err = b.dbStore.GetServices()
+
+	osbResponse.Services, err = b.storage.GetServicesCatalog()
 	if err != nil {
 		description := "Error getting catalog"
 		glog.Errorf("%s: %s", description, err.Error())
@@ -138,6 +138,14 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
+	if request.ServiceID == "" {
+		return nil, UnprocessableEntityWithMessage("ServiceRequired", "The service ID was not provided.")
+	}
+
+	if request.PlanID == "" {
+		return nil, UnprocessableEntityWithMessage("PlanRequired", "The plan ID was not provided.")
+	}
+
 	newUuid, _ := uuid.NewV4()
 	callerReference := newUuid.String()
 
@@ -145,27 +153,49 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 	respOpKey := osb.OperationKey(operationKey)
 	response.OperationKey = &respOpKey
 
-	newInstance := &storage.InstanceSpec{
-		ID:           request.InstanceID,
-		ServiceId:    request.ServiceID,
-		PlanId:       request.PlanID,
-		OperationKey: operationKey,
-	}
+	distributionID := request.InstanceID
+	serviceID := request.ServiceID
+	planID := request.PlanID
 
-	// Check to see if this is the same instance
-	if i := b.instances[request.InstanceID]; i != nil {
-		if i.Match(newInstance) {
-			response.Exists = true
-			return &response, nil
-		} else {
-			// Instance ID in use, this is a conflict.
-			description := "InstanceID in use"
-			return nil, ConflictErrorWithMessage(description)
+	var billingCode string
+
+	for k, v := range request.Parameters {
+		switch vv := v.(type) {
+		case string:
+			if k == "billing_code" {
+				billingCode = vv
+				fmt.Println(k, "is string ", vv)
+			}
 		}
 	}
-	b.instances[request.InstanceID] = newInstance
 
-	err := b.service.CreateCloudFrontDistribution(callerReference, newInstance)
+	if billingCode == "" {
+		return nil, UnprocessableEntityWithMessage("BillingCodeRequired", "The billing code was not provided.")
+	}
+
+	// TODO Check to see if this is the same instance
+	/*
+	  if i := b.instances[request.InstanceID]; i != nil {
+			if i.Match(distributionID) {
+				response.Exists = true
+				return &response, nil
+			} else {
+				// Instance ID in use, this is a conflict.
+				description := "InstanceID in use"
+				return nil, ConflictErrorWithMessage(description)
+			}
+		}
+
+		b.instances[request.InstanceID] = &storage.Distribution{
+		  DistributionID: distributionID,
+	    Plan: &storage.Plan{
+	      PlanID: planID,
+	      ServiceID: serviceID,
+	    },
+		}
+	*/
+
+	err := b.service.CreateCloudFrontDistribution(distributionID, callerReference, operationKey, serviceID, planID, billingCode)
 	if err != nil {
 		return nil, InternalServerErr()
 	}
@@ -179,8 +209,8 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 
 	response := broker.DeprovisionResponse{}
 
-	newUuid, _ := uuid.NewV4()
-	callerReference := newUuid.String()
+	// newUuid, _ := uuid.NewV4()
+	// callerReference := newUuid.String()
 
 	if !request.AcceptsIncomplete {
 		return nil, UnprocessableEntityWithMessage("AsyncRequired", "The query parameter accepts_incomplete=true MUST be included the request.")
@@ -195,20 +225,22 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 	response.OperationKey = &respOpKey
 	response.Async = b.async
 
-	oldInstance := &storage.InstanceSpec{
-		ID:           request.InstanceID,
-		ServiceId:    request.ServiceID,
-		PlanId:       request.PlanID,
-		OperationKey: operationKey,
-	}
+	/*
+	  oldInstance := &storage.InstanceSpec{
+	    ID:           request.InstanceID,
+	    ServiceId:    request.ServiceID,
+	    PlanId:       request.PlanID,
+	    OperationKey: operationKey,
+	  }
 
-	err := b.service.DeleteCloudFrontDistribution(callerReference, oldInstance)
-	if err != nil {
-		return nil, InternalServerErr()
-	}
+	  err := b.service.DeleteCloudFrontDistribution(callerReference, oldInstance)
+	  if err != nil {
+	    return nil, InternalServerErr()
+	  }
 
-	delete(b.instances, request.InstanceID)
+	  delete(b.instances, request.InstanceID)
 
+	*/
 	return &response, nil
 }
 
@@ -219,9 +251,9 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 	response := broker.LastOperationResponse{}
 
 	/*
-	  if *request.OperationKey == "" {
-	    return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
-	  }
+	   if *request.OperationKey == "" {
+	     return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
+	   }
 	*/
 
 	if request.InstanceID == "" {
@@ -230,20 +262,22 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 
 	// opKey := string(*request.OperationKey)
 
-	instance := &storage.InstanceSpec{
-		ID: request.InstanceID,
-	}
+	/*
+	  instance := &storage.InstanceSpec{
+	    ID: request.InstanceID,
+	  }
 
-	status, err := b.service.CheckLastOperation(instance)
+	  status, err := b.service.CheckLastOperation(instance)
 
-	if err != nil {
-		msg := fmt.Sprintf("error checking last operation for %s: %s", instance.ID, err)
-		glog.Error(msg)
-		return nil, InternalServerErrWithMessage("InternalServerError", "server error when checking status of last operation")
-	}
+	  if err != nil {
+	    msg := fmt.Sprintf("error checking last operation for %s: %s", instance.ID, err)
+	    glog.Error(msg)
+	    return nil, InternalServerErrWithMessage("InternalServerError", "server error when checking status of last operation")
+	  }
 
-	response.State = osb.LastOperationState(*status.Status)
-	response.Description = status.Description
+	  response.State = osb.LastOperationState(*status.Status)
+	  response.Description = status.Description
+	*/
 
 	return &response, nil
 }

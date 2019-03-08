@@ -21,15 +21,15 @@ import (
 
 const ttl int64 = 2592000
 
-func (s *AwsConfigSpec) CreateCloudFrontDistribution(callerReference string, newInstance *storage.InstanceSpec) (err error) {
+func (s *AwsConfig) CreateCloudFrontDistribution(distributionId string, callerReference string, operationKey string, serviceId string, planId string, billingCode string) (err error) {
 
-	cf := &cloudFrontInstanceSpec{
+	cf := &cloudFrontInstance{
 		callerReference: aws.String(callerReference),
-		instanceId:      aws.String(newInstance.ID),
-		billingCode:     aws.String(newInstance.BillingCode),
-		planId:          aws.String(newInstance.PlanId),
-		serviceId:       aws.String(newInstance.ServiceId),
-		operationKey:    aws.String(newInstance.OperationKey),
+		instanceId:      aws.String(distributionId),
+		billingCode:     aws.String(billingCode),
+		planId:          aws.String(planId),
+		serviceId:       aws.String(serviceId),
+		operationKey:    aws.String(operationKey),
 	}
 
 	glog.Infof("out: %+#v\n", cf)
@@ -38,7 +38,7 @@ func (s *AwsConfigSpec) CreateCloudFrontDistribution(callerReference string, new
 	return nil
 }
 
-func (s *AwsConfigSpec) createDistributionController(cf *cloudFrontInstanceSpec) {
+func (s *AwsConfig) createDistributionController(cf *cloudFrontInstance) {
 	var err error
 
 	glog.Infof("==== createDistributionController [%s] ====", *cf.operationKey)
@@ -98,7 +98,7 @@ func (s *AwsConfigSpec) createDistributionController(cf *cloudFrontInstanceSpec)
 	return
 }
 
-func (s *AwsConfigSpec) createDistribution(cf *cloudFrontInstanceSpec) {
+func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) {
 	var err error
 	var cfOut *cloudfront.CreateDistributionWithTagsOutput
 	var ttlPtr *int64
@@ -153,7 +153,7 @@ func (s *AwsConfigSpec) createDistribution(cf *cloudFrontInstanceSpec) {
 					Items:    s3Origin,
 					Quantity: aws.Int64(1),
 				},
-				Comment: cf.s3Bucket.name,
+				Comment: cf.s3Bucket.bucketName,
 				DefaultCacheBehavior: &cloudfront.DefaultCacheBehavior{
 					AllowedMethods: &cloudfront.AllowedMethods{
 						CachedMethods: &cloudfront.CachedMethods{
@@ -227,11 +227,11 @@ func (s *AwsConfigSpec) createDistribution(cf *cloudFrontInstanceSpec) {
 	cf.distChan <- nil
 }
 
-func (s *AwsConfigSpec) DeleteCloudFrontDistribution(callerReference string, cfInstance *storage.InstanceSpec) error {
+func (s *AwsConfig) DeleteCloudFrontDistribution(callerReference string, cfInstance *storage.Distribution) error {
 
-	cf := &cloudFrontInstanceSpec{
+	cf := &cloudFrontInstance{
 		callerReference: aws.String(callerReference),
-		instanceId:      aws.String(cfInstance.ID),
+		instanceId:      aws.String(cfInstance.DistributionID),
 		operationKey:    aws.String(cfInstance.OperationKey),
 	}
 
@@ -242,7 +242,7 @@ func (s *AwsConfigSpec) DeleteCloudFrontDistribution(callerReference string, cfI
 	return nil
 }
 
-func (s *AwsConfigSpec) deleteDistributionController(cf *cloudFrontInstanceSpec) {
+func (s *AwsConfig) deleteDistributionController(cf *cloudFrontInstance) {
 	var err error
 
 	glog.Info("==== deleteDistributinController [%s] ====", *cf.operationKey)
@@ -295,7 +295,7 @@ func (s *AwsConfigSpec) deleteDistributionController(cf *cloudFrontInstanceSpec)
 	return
 }
 
-func (s *AwsConfigSpec) getDistibutionConfig(svc *cloudfront.CloudFront, cf *cloudFrontInstanceSpec) (*cloudfront.GetDistributionConfigOutput, error) {
+func (s *AwsConfig) getDistibutionConfig(svc *cloudfront.CloudFront, cf *cloudFrontInstance) (*cloudfront.GetDistributionConfigOutput, error) {
 	var err error
 
 	glog.Infof("==== getDistributionConfig [%s] ====", *cf.operationKey)
@@ -314,7 +314,7 @@ func (s *AwsConfigSpec) getDistibutionConfig(svc *cloudfront.CloudFront, cf *clo
 	return getDistConfOut, nil
 }
 
-func (s AwsConfigSpec) deleteDistribution(cf *cloudFrontInstanceSpec) {
+func (s AwsConfig) deleteDistribution(cf *cloudFrontInstance) {
 	var err error
 	var deleteWaitCnt = s.waitCnt
 	var deleteWaitSec = s.waitSecs
@@ -362,7 +362,7 @@ func (s AwsConfigSpec) deleteDistribution(cf *cloudFrontInstanceSpec) {
 	cf.distChan <- err
 }
 
-func (s *AwsConfigSpec) updateDistributionEnableFlag(cf *cloudFrontInstanceSpec, enabled bool) error {
+func (s *AwsConfig) updateDistributionEnableFlag(cf *cloudFrontInstance, enabled bool) error {
 	var err error
 
 	glog.Infof("==== updateDistributionEnabledFlag [%s] <%t> ====", *cf.operationKey, enabled)
@@ -400,15 +400,15 @@ func (s *AwsConfigSpec) updateDistributionEnableFlag(cf *cloudFrontInstanceSpec,
 	return nil
 }
 
-func (s *AwsConfigSpec) enableDistribution(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) enableDistribution(cf *cloudFrontInstance) error {
 	return s.updateDistributionEnableFlag(cf, true)
 }
 
-func (s *AwsConfigSpec) disableDistribution(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) disableDistribution(cf *cloudFrontInstance) error {
 	return s.updateDistributionEnableFlag(cf, false)
 }
 
-func (s *AwsConfigSpec) createOriginAccessIdentity(cf *cloudFrontInstanceSpec) {
+func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) {
 	var err error
 
 	glog.Infof("==== createOriginAccessIdentity [%s] ====", *cf.operationKey)
@@ -425,7 +425,7 @@ func (s *AwsConfigSpec) createOriginAccessIdentity(cf *cloudFrontInstanceSpec) {
 	originAccessIdentity, err := svc.CreateCloudFrontOriginAccessIdentity(&cloudfront.CreateCloudFrontOriginAccessIdentityInput{
 		CloudFrontOriginAccessIdentityConfig: &cloudfront.OriginAccessIdentityConfig{
 			CallerReference: cf.callerReference,
-			Comment:         aws.String(*cf.s3Bucket.name),
+			Comment:         aws.String(*cf.s3Bucket.bucketName),
 		},
 	})
 
@@ -443,7 +443,7 @@ func (s *AwsConfigSpec) createOriginAccessIdentity(cf *cloudFrontInstanceSpec) {
 	cf.distChan <- nil
 }
 
-func (s *AwsConfigSpec) deleteOriginAccessIdentity(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) deleteOriginAccessIdentity(cf *cloudFrontInstance) error {
 	var err error
 
 	glog.Infof("==== deleteOriginAccessIdentity [%s] ====", *cf.operationKey)
@@ -477,12 +477,12 @@ func (s *AwsConfigSpec) deleteOriginAccessIdentity(cf *cloudFrontInstanceSpec) e
 	return nil
 }
 
-func (s *AwsConfigSpec) CheckLastOperation(in *storage.InstanceSpec) (*StatusSpec, error) {
+func (s *AwsConfig) CheckLastOperation(in *storage.Distribution) (*OperationState, error) {
 
-	sMsg := statusMsg(StateInProgress, "task")
+	sMsg := statusMsg(OperationInProgress, "task")
 
-	retStatus := &StatusSpec{
-		Status:      &StateInProgress,
+	retStatus := &OperationState{
+		Status:      &OperationInProgress,
 		Description: &sMsg,
 	}
 

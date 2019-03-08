@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-func (s *AwsConfigSpec) genBucketName() *string {
+func (s *AwsConfig) genBucketName() *string {
 	newUuid, _ := uuid.NewV4()
 
 	bucketName := strings.Split(newUuid.String(), "-")[0]
@@ -25,7 +25,7 @@ func (s *AwsConfigSpec) genBucketName() *string {
 	return &bucketName
 }
 
-func (s *AwsConfigSpec) createS3Bucket(cf *cloudFrontInstanceSpec) {
+func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) {
 
 	glog.Infof("==== createS3Bucket [%s] ====", *cf.operationKey)
 	svc := s3.New(s.sess)
@@ -59,7 +59,7 @@ func (s *AwsConfigSpec) createS3Bucket(cf *cloudFrontInstanceSpec) {
 		Bucket: bucketName,
 	}
 
-	glog.Info(">>>> waiting for distribution <<<<")
+	glog.Info(">>>> waiting for bucket <<<<")
 	err = svc.WaitUntilBucketExists(headBucketIn)
 
 	if err != nil {
@@ -68,17 +68,17 @@ func (s *AwsConfigSpec) createS3Bucket(cf *cloudFrontInstanceSpec) {
 		return
 	}
 
-	cf.s3Bucket = &s3BucketSpec{
-		uri:      s3out.Location,
-		name:     bucketName,
-		fullname: aws.String(fullname),
-		id:       aws.String("S3-" + *bucketName),
+	cf.s3Bucket = &s3Bucket{
+		bucketURI:  s3out.Location,
+		bucketName: bucketName,
+		fullname:   aws.String(fullname),
+		originID:   aws.String("S3-" + *bucketName),
 	}
 
 	cf.distChan <- nil
 }
 
-func (s *AwsConfigSpec) addBucketPolicy(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 	glog.Infof("==== addBucketPolicy [%s] ====", *cf.operationKey)
 
 	policy, _ := json.Marshal(map[string]interface{}{
@@ -92,7 +92,7 @@ func (s *AwsConfigSpec) addBucketPolicy(cf *cloudFrontInstanceSpec) error {
 					"AWS": fmt.Sprintf("arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity %s", *cf.originAccessIdentity),
 				},
 				"Action":   "s3:GetObject",
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/*", *cf.s3Bucket.name),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/*", *cf.s3Bucket.bucketName),
 			},
 		},
 	})
@@ -107,12 +107,12 @@ func (s *AwsConfigSpec) addBucketPolicy(cf *cloudFrontInstanceSpec) error {
 	}
 
 	_, err := svc.PutBucketPolicy(&s3.PutBucketPolicyInput{
-		Bucket: cf.s3Bucket.name,
+		Bucket: cf.s3Bucket.bucketName,
 		Policy: aws.String(string(policy)),
 	})
 
 	if err != nil {
-		msg := fmt.Sprintf("error adding bucketpolicy to %s: %s", *cf.s3Bucket.name, err.Error())
+		msg := fmt.Sprintf("error adding bucketpolicy to %s: %s", *cf.s3Bucket.bucketName, err.Error())
 		glog.Errorf(msg)
 		return errors.New(msg)
 	}
@@ -120,13 +120,13 @@ func (s *AwsConfigSpec) addBucketPolicy(cf *cloudFrontInstanceSpec) error {
 	return nil
 }
 
-func (s *AwsConfigSpec) deleteS3Bucket(cf *cloudFrontInstanceSpec) error {
+func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
 	glog.Infof("==== deleteS3Bucket [%s] ====", *cf.operationKey)
 
 	svc := s3.New(s.sess)
 
 	input := &s3.DeleteBucketInput{
-		Bucket: cf.s3Bucket.name,
+		Bucket: cf.s3Bucket.bucketName,
 	}
 
 	err := input.Validate()
@@ -138,18 +138,18 @@ func (s *AwsConfigSpec) deleteS3Bucket(cf *cloudFrontInstanceSpec) error {
 	_, err = svc.DeleteBucket(input)
 
 	if err != nil {
-		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
+		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.bucketName, err)
 		return err
 	}
 
 	waitIn := &s3.HeadBucketInput{
-		Bucket: cf.s3Bucket.name,
+		Bucket: cf.s3Bucket.bucketName,
 	}
 
 	err = svc.WaitUntilBucketNotExists(waitIn)
 
 	if err != nil {
-		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.name, err)
+		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.bucketName, err)
 		return err
 	}
 

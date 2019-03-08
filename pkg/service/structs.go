@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 )
 
-type AwsConfigSpec struct {
+type AwsConfig struct {
 	namePrefix string
 	conf       *aws.Config
 	sess       *session.Session
@@ -20,29 +20,29 @@ type AwsConfigSpec struct {
 	waitSecs   time.Duration
 }
 
-type cloudFrontInstanceSpec struct {
-	instanceId           *string
+type cloudFrontInstance struct {
+	instanceId           *string // osb instance id
 	billingCode          *string
 	planId               *string
 	serviceId            *string
-	distributionId       *string
+	distributionId       *string // cloudfront id
 	distributionURL      *string
 	callerReference      *string
 	originAccessIdentity *string
-	iAMUser              *iAMUserSpec
-	s3Bucket             *s3BucketSpec
+	iAMUser              *iAMUser
+	s3Bucket             *s3Bucket
 	operationKey         *string
 	distChan             chan error
 }
 
-type s3BucketSpec struct {
-	name     *string
-	fullname *string
-	uri      *string
-	id       *string
+type s3Bucket struct {
+	bucketName *string
+	fullname   *string
+	bucketURI  *string
+	originID   *string
 }
 
-type iAMUserSpec struct {
+type iAMUser struct {
 	userName   *string
 	arn        *string
 	accessKey  *string
@@ -51,12 +51,12 @@ type iAMUserSpec struct {
 }
 
 var (
-	StateInProgress = string(osb.StateInProgress)
-	StateSucceeded  = string(osb.StateSucceeded)
-	StateFailed     = string(osb.StateFailed)
+	OperationInProgress = string(osb.StateInProgress)
+	OperationSucceeded  = string(osb.StateSucceeded)
+	OperationFailed     = string(osb.StateFailed)
 )
 
-type StatusSpec struct {
+type OperationState struct {
 	Status      *string
 	Description *string
 }

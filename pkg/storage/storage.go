@@ -7,9 +7,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
-	"reflect"
 	"strings"
 	"syscall"
 
@@ -19,18 +19,16 @@ import (
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
-func (i *InstanceSpec) Match(other *InstanceSpec) bool {
-	return reflect.DeepEqual(i, other)
-}
-
+/*
 type Storage interface {
-	GetServices() ([]osb.Service, error)
-	GetPlans(string) ([]PlanSpec, error)
-	GetPlanByID(string) (*PlanSpec, error)
+  GetServicesCatalog() ([]osb.Service, error)
+  NewDistribution(string, string, string) (*Distribution, error)
+  NewOrigin(string, string, string, string, string) (*Origin, error)
 }
+*/
 
 type PostgresStorage struct {
-	Storage
+	// Storage
 	db *sql.DB
 }
 
@@ -104,15 +102,15 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 	return &pgStorage, nil
 }
 
-func (p *PostgresStorage) getPlans(subquery string, arg string) ([]PlanSpec, error) {
-	rows, err := p.db.Query(plansQuery+subquery, arg)
+func getPlans(db *sql.DB, serviceId string) ([]osb.Plan, error) {
+	rows, err := db.Query(plansQuery+"and services.service_id = $1 order by plans.name", serviceId)
 	if err != nil {
 		glog.Errorf("getPlans query failed: %s\n", err.Error())
 		return nil, err
 	}
 	defer rows.Close()
 
-	plans := make([]PlanSpec, 0)
+	plans := make([]osb.Plan, 0)
 
 	for rows.Next() {
 		var id, name, serviceName, humanName, description, categories, costUnit string
@@ -125,37 +123,25 @@ func (p *PostgresStorage) getPlans(subquery string, arg string) ([]PlanSpec, err
 			return nil, errors.New("Scan from plans query failed: " + err.Error())
 		}
 
-		plans = append(plans, PlanSpec{
-			basePlan: osb.Plan{
-				ID:          id,
-				Name:        name,
-				Description: description,
-				Free:        &free,
-				Metadata: map[string]interface{}{
-					"humanName":   humanName,
-					"cents":       cents,
-					"cost_unit":   costUnit,
-					"beta":        beta,
-					"depreciated": depreciated,
-				},
-			},
+		plans = append(plans, osb.Plan{
 			ID:          id,
 			Name:        name,
-			HumanName:   humanName,
 			Description: description,
-			Categories:  categories,
-			Free:        free,
-			CostCents:   cents,
-			CostUnit:    costUnit,
-			Beta:        beta,
-			Depreciated: depreciated,
+			Free:        &free,
+			Metadata: map[string]interface{}{
+				"humanName":   humanName,
+				"cents":       cents,
+				"cost_unit":   costUnit,
+				"beta":        beta,
+				"depreciated": depreciated,
+			},
 		})
 	}
 
 	return plans, nil
 }
 
-func (p *PostgresStorage) GetServices() ([]osb.Service, error) {
+func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 	var planUpdateable bool = true
 
 	services := make([]osb.Service, 0)
@@ -169,13 +155,14 @@ func (p *PostgresStorage) GetServices() ([]osb.Service, error) {
 	for rows.Next() {
 		var service_id, service_name, service_human_name, service_description, service_categories, service_image string
 		var beta, deprecated bool
+
 		err = rows.Scan(&service_id, &service_name, &service_human_name, &service_description, &service_categories, &service_image, &beta, &deprecated)
 		if err != nil {
 			glog.Errorf("Unable to get services: %s\n", err.Error())
-			return nil, errors.New("Unable to get services: " + err.Error())
+			return nil, errors.New("Unable to scan services: " + err.Error())
 		}
 
-		plans, err := p.GetPlans(service_id)
+		plans, err := getPlans(p.db, service_id)
 		if err != nil {
 			glog.Errorf("Unable to get plans for %s: %s\n", service_name, err.Error())
 			return nil, errors.New("Unable to get plans for " + service_name + ": " + err.Error())
@@ -183,7 +170,7 @@ func (p *PostgresStorage) GetServices() ([]osb.Service, error) {
 
 		osbPlans := make([]osb.Plan, 0)
 		for _, plan := range plans {
-			osbPlans = append(osbPlans, plan.basePlan)
+			osbPlans = append(osbPlans, plan)
 		}
 
 		services = append(services, osb.Service{
@@ -204,20 +191,158 @@ func (p *PostgresStorage) GetServices() ([]osb.Service, error) {
 	return services, nil
 }
 
-func (p *PostgresStorage) GetPlans(serviceId string) ([]PlanSpec, error) {
-	return p.getPlans(" and services.service::varchar(1024) = $1::varchar(1024) order by plans.name", serviceId)
-}
+func (p *PostgresStorage) NewDistribution(distributionID string, planID string, billingCode string) (*Distribution, error) {
+	var err error
+	var cnt int
 
-func (p *PostgresStorage) GetPlanByID(planId string) (*PlanSpec, error) {
-	plans, err := p.getPlans(" and plans.plan::varchar(1024) = $1::varchar(1024)", planId)
+	var checkPlanScript = `
+    select count(*) from plans
+    where plan_id = $1
+    and deleted_at is null
+  `
 
+	err = p.db.QueryRow(checkPlanScript, planID).Scan(&cnt)
+
+	if err != nil && err.Error() == "sql: no rows in result set" {
+		msg := fmt.Sprintf("NewDistribution: can not find plan: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	} else if err != nil {
+		msg := fmt.Sprintf("NewDistribution: error finding plan: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	distribution := &Distribution{
+		DistributionID: distributionID,
+		PlanID:         planID,
+	}
+
+	insertDistScript := `insert into distributions
+    (distribution_id, plan_id, billing_code) 
+    values 
+    ($1, $2, $3) returning distribution_id;`
+
+	err = p.db.QueryRow(insertDistScript, distributionID, planID, billingCode).Scan(&distribution.DistributionID)
 	if err != nil {
+		msg := fmt.Sprintf("NewDistribution: error inserting distribution: %s", err.Error())
+		glog.Error(msg)
 		return nil, err
 	}
 
-	if len(plans) == 0 {
-		return nil, errors.New("plans not found")
+	glog.Infof("NewDistribution: distribution id: %s", distribution.DistributionID)
+
+	return distribution, nil
+}
+
+var checkDistScript = `
+    select distribution_id from distributions
+    where distribution_id = $1
+    and deleted_at is null
+  `
+
+func (p *PostgresStorage) NewOrigin(distributionID string, bucketName string, originURL string, originPath string, billingCode string) (*Origin, error) {
+	var err error
+
+	distribution := &Distribution{}
+
+	err = p.db.QueryRow(checkDistScript, distributionID).Scan(&distribution.DistributionID)
+
+	switch {
+	case err == sql.ErrNoRows:
+		msg := fmt.Sprintf("NewOrigin: origin not found: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	case err != nil:
+		msg := fmt.Sprintf("NewOrigin: error finding origin: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
 	}
 
-	return &plans[0], nil
+	origin := &Origin{
+		DistributionID: distributionID,
+		BucketName:     bucketName,
+		OriginUrl:      originURL,
+		OriginPath:     "/",
+		BillingCode:    billingCode,
+	}
+
+	if err = p.db.QueryRow(`insert into origins
+    (origin_id, distribution_id, bucket, bucket_url)
+    values 
+    (uuid_generate_v4(), $1, $2, $3) returning origin_id;`,
+		distributionID, bucketName, originURL).Scan(&origin.OriginID); err != nil {
+		msg := fmt.Sprintf("CreateOrigin: error inserting origin: %s", err.Error())
+		glog.Error(msg)
+		return nil, err
+	}
+
+	glog.Infof("CreateOrigin: originId: %s", origin.OriginID)
+
+	return origin, nil
+}
+
+func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string, accessKey string, secretKey string) error {
+	var err error
+	var getOriginScript = `
+    select origin_id from origins
+    where origin_id = $1
+    and deleted_at is null
+  `
+
+	origin := &Origin{}
+
+	err = p.db.QueryRow(getOriginScript, originID).Scan(&origin.OriginID)
+
+	switch {
+	case err == sql.ErrNoRows:
+		msg := fmt.Sprintf("AddIAMUser: origin not found: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	case err != nil:
+		msg := fmt.Sprintf("AddIAMUser: error finding origin: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	updateScript := `
+    update origins
+      set iam_user = $1,
+        access_key = $2,
+        secret_key = $3
+      where origin_id = $4
+`
+	_, err = p.db.Exec(updateScript, iAMUser, accessKey, secretKey, originID)
+
+	if err != nil {
+		msg := fmt.Sprintf("AddIAMUser: error updating origin: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (p *PostgresStorage) AddOriginAccessIdentity(distributionID string, originAccessIdentity string) error {
+	var err error
+
+	distribution := &Distribution{}
+
+	err = p.db.QueryRow(checkDistScript, distributionID).Scan(&distribution.DistributionID)
+
+	updateScript := `
+    update distributions
+      set origin_access_identity = $2
+    where distribution_id = $1
+`
+
+	_, err = p.db.Exec(updateScript, distributionID, originAccessIdentity)
+
+	if err != nil {
+		msg := fmt.Sprintf("AddOriginAccessIdentity: error updating distribution: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
 }

@@ -2,7 +2,7 @@ package storage
 
 const servicesQuery string = `
 select
-    service,
+    service_id,
     name,
     human_name,
     description,
@@ -10,11 +10,11 @@ select
     image,
     beta,
     depreciated
-from services where deleted = false `
+from services where deleted_at is null `
 
 const plansQuery string = `
 select 
-    plans.plan,
+    plans.plan_id,
     plans.name,
     services.name,
     plans.human_name,
@@ -25,8 +25,8 @@ select
     plans.cost_unit,
     plans.beta,
     plans.depreciated
-from plans join services on services.service = plans.service
-where services.deleted = false and plans.deleted = false
+from plans join services on services.service_id = plans.service_id
+where services.deleted_at is null and plans.deleted_at is null
 `
 
 const taskQuery string = `
@@ -38,180 +38,178 @@ select
   task.retries,
   task.metadata,
   task.result,
-  task.created,
-  task.updated,
-  task.started,
-  task.finished
-from tasks join distributions on distributions.Id = task.distributionId
-where distributions.deleted = false and tasks.deleted = false
+  task.created_at,
+  task.updated_at,
+  task.started_at,
+  task.finished_at,
+from tasks join distributions on distributions.distributin_id = task.distribution_id
+where distributions.deleted_at is null and tasks.deleted_at is null
 `
 
 const createScript string = `
 DO
-$$
-BEGIN
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  $$
+    BEGIN
+      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'alpha_numeric')
-THEN
-CREATE DOMAIN alpha_numeric AS varchar(128) CHECK (value ~ '^[A-z0-9\-]+$');
-END IF;
+      IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'alpha_numeric')
+      THEN
+        CREATE DOMAIN alpha_numeric AS varchar(128) CHECK (value ~ '^[A-z0-9\-]+$');
+      END IF;
 
-IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'distribution_type')
-THEN
-CREATE TYPE distribution_type AS ENUM ('distribution', 'alias');
-END IF;
+      IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'cents')
+      THEN
+        CREATE DOMAIN cents AS int CHECK (value >= 0);
+      END IF;
 
-IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'cents')
-THEN
-CREATE DOMAIN cents AS int CHECK (value >= 0);
-END IF;
+      CREATE OR REPLACE FUNCTION mark_updated_column()
+        RETURNS trigger AS
+      $emp_stamp$
+      BEGIN
+        NEW.updated_at = now();
+        RETURN NEW;
+      END;
+      $emp_stamp$
+        LANGUAGE plpgsql;
 
-IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'costunit')
-THEN
-CREATE TYPE costunit AS ENUM ('year', 'month', 'day', 'hour', 'minute', 'second', 'cycle', 'byte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte', 'op', 'unit');
-END IF;
+      CREATE TABLE IF NOT EXISTS services
+      (
+        service_id  uuid                     NOT NULL PRIMARY KEY,
+        name        alpha_numeric            NOT NULL UNIQUE,
+        human_name  text                     NOT NULL,
+        description text                     NOT NULL,
+        categories  varchar(1024)            NOT NULL DEFAULT '',
+        image       varchar(1024)            NOT NULL DEFAULT '',
 
-IF NOT exists(SELECT 1 FROM pg_type WHERE typname = 'task_status')
-THEN
-CREATE TYPE task_status AS ENUM ('pending', 'started', 'finished', 'failed');
-END IF;
+        beta        boolean                  NOT NULL DEFAULT FALSE,
+        depreciated boolean                  NOT NULL DEFAULT FALSE,
 
-CREATE OR REPLACE FUNCTION mark_updated_column()
-RETURNS trigger AS $emp_stamp$
-BEGIN
-NEW.updated = now();
-RETURN NEW;
-END;
-$emp_stamp$
-LANGUAGE plpgsql;
+        created_at  timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        updated_at  timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        deleted_at  timestamp WITH TIME ZONE
+      );
 
-CREATE TABLE IF NOT EXISTS services
-(
-service     uuid                     NOT NULL PRIMARY KEY,
-name        alpha_numeric            NOT NULL,
-human_name  text                     NOT NULL,
-description text                     NOT NULL,
-categories  varchar(1024)            NOT NULL DEFAULT 'Content Delivery Network, CDN',
-image       varchar(1024)            NOT NULL DEFAULT '',
+      DROP TRIGGER IF EXISTS services_updated
+        ON services;
 
-beta        boolean                  NOT NULL DEFAULT FALSE,
-depreciated boolean                  NOT NULL DEFAULT FALSE,
-deleted     boolean                  NOT NULL DEFAULT FALSE,
+      CREATE TRIGGER services_updated
+        BEFORE UPDATE
+        ON services
+        FOR EACH ROW
+      EXECUTE PROCEDURE mark_updated_column();
 
-created     timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
-updated     timestamp WITH TIME ZONE NOT NULL DEFAULT now()
-);
+      CREATE TABLE IF NOT EXISTS plans
+      (
+        plan_id     uuid                                    NOT NULL PRIMARY KEY,
+        service_id  uuid REFERENCES services ("service_id") NOT NULL,
+        name        alpha_numeric                           NOT NULL UNIQUE,
+        human_name  text                                    NOT NULL,
+        description text                                    NOT NULL,
+        categories  text                                    NOT NULL DEFAULT '',
+        free        boolean                                 NOT NULL DEFAULT FALSE,
+        cost_cents  cents                                   NOT NULL DEFAULT 1000,
+        cost_unit   costunit                                NOT NULL DEFAULT 'month',
+        attributes  json                                    NOT NULL DEFAULT '{}',
 
-DROP TRIGGER IF EXISTS services_updated
-ON services;
+        beta        boolean                                 NOT NULL DEFAULT FALSE,
+        depreciated boolean                                 NOT NULL DEFAULT FALSE,
 
-CREATE TRIGGER services_updated
-BEFORE UPDATE
-ON services
-FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
+        created_at  timestamp WITH TIME ZONE                NOT NULL DEFAULT now(),
+        updated_at  timestamp WITH TIME ZONE                NOT NULL DEFAULT now(),
+        deleted_at  timestamp WITH TIME ZONE
+      );
 
-CREATE TABLE IF NOT EXISTS plans
-(
-plan        uuid                                 NOT NULL PRIMARY KEY,
-service     uuid REFERENCES services ("service") NOT NULL,
-name        alpha_numeric                        NOT NULL,
-human_name  text                                 NOT NULL,
-description text                                 NOT NULL,
-type        distribution_type                    NOT NULL DEFAULT 'distribution',
-categories  text                                 NOT NULL DEFAULT '',
-free        boolean                              NOT NULL DEFAULT FALSE,
-cost_cents  cents                                NOT NULL DEFAULT 1000,
-cost_unit   costunit                             NOT NULL DEFAULT 'month',
-attributes  json                                 NOT NULL DEFAULT '{}',
+      DROP TRIGGER IF EXISTS plans_updated
+        ON plans;
 
-beta        boolean                              NOT NULL DEFAULT FALSE,
-depreciated boolean                              NOT NULL DEFAULT FALSE,
-deleted     boolean                              NOT NULL DEFAULT FALSE,
+      CREATE TRIGGER plans_updated
+        BEFORE UPDATE
+        ON plans
+        FOR EACH ROW
+      EXECUTE PROCEDURE mark_updated_column();
 
-created     timestamp WITH TIME ZONE             NOT NULL DEFAULT now(),
-updated     timestamp WITH TIME ZONE             NOT NULL DEFAULT now()
-);
+      CREATE TABLE IF NOT EXISTS distributions
+      (
+        distribution_id uuid  NOT NULL PRIMARY KEY,
 
-DROP TRIGGER IF EXISTS plans_updated
-ON plans;
+        plan_id         uuid REFERENCES plans ("plan_id") NOT NULL,
+        cloudfront_id   varchar(200)                      UNIQUE,
+        cloudfront_url  varchar(200),
+        origin_access_identity varchar(200),
+        claimed         boolean                           NOT NULL DEFAULT FALSE,
+        status          varchar(1024)                     NOT NULL DEFAULT 'new',
+        billing_code    varchar(200),
 
-CREATE TRIGGER plans_updated
-BEFORE UPDATE
-ON plans
-FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
+        created_at      timestamp WITH TIME ZONE          NOT NULL DEFAULT now(),
+        updated_at      timestamp WITH TIME ZONE          NOT NULL DEFAULT now(),
+        deleted_at      timestamp WITH TIME ZONE
+      );
 
-CREATE TABLE IF NOT EXISTS origins
-(
-id          uuid                                NOT NULL PRIMARY KEY,
-bucket      varchar(1024)                       NOT NULL,
-hostname    varchar(1024)                       NOT NULL,
-access_key  varchar(128)                        NOT NULL,
-secret_key  varchar(128)                        NOT NULL,
-created     timestamp WITH TIME ZONE            NOT NULL DEFAULT now(),
-updated     timestamp WITH TIME ZONE            NOT NULL DEFAULT now()
+      DROP TRIGGER IF EXISTS distributions_updated
+        ON distributions;
 
-);
+      CREATE TRIGGER distributions_updated
+        BEFORE UPDATE
+        ON distributions
+        FOR EACH ROW
+      EXECUTE PROCEDURE mark_updated_column();
 
-DROP TRIGGER IF EXISTS origins_updated
-ON origins;
+      CREATE TABLE IF NOT EXISTS origins
+      (
+        origin_id  uuid                     NOT NULL PRIMARY KEY,
+        distribution_id uuid REFERENCES distributions ("distribution_id"),
 
-CREATE TRIGGER origins_updated
-BEFORE UPDATE
-ON origins
-FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
+        bucket     varchar(1024)            NOT NULL UNIQUE,
+        bucket_url varchar(1024)            NOT NULL,
+        iam_user   alpha_numeric,
+        access_key varchar(128),
+        secret_key varchar(128),
 
-CREATE TABLE IF NOT EXISTS distributions
-(
-id      varchar(1024)                     NOT NULL PRIMARY KEY,
-name    varchar(200)                      NOT NULL,
-plan    uuid REFERENCES plans ("plan")    NOT NULL,
-claimed boolean                           NOT NULL DEFAULT FALSE,
-status  varchar(1024)                     NOT NULL DEFAULT 'unknown',
-url     varchar(128)                      NOT NULL DEFAULT '',
-origin  uuid REFERENCES origins ("id")    NOT NULL,
-created timestamp WITH TIME ZONE          NOT NULL DEFAULT now(),
-updated timestamp WITH TIME ZONE          NOT NULL DEFAULT now(),
-deleted bool                              NOT NULL DEFAULT FALSE
-);
+        created_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        updated_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        deleted_at timestamp WITH TIME ZONE
+      );
 
-DROP TRIGGER IF EXISTS distributions_updated
-ON distributions;
+      DROP TRIGGER IF EXISTS origins_updated
+        ON origins;
 
-CREATE TRIGGER distributions_updated
-BEFORE UPDATE
-ON distributions
-FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
+      CREATE TRIGGER origins_updated
+        BEFORE UPDATE
+        ON origins
+        FOR EACH ROW
+      EXECUTE PROCEDURE mark_updated_column();
 
-CREATE TABLE IF NOT EXISTS tasks
-(
-task     uuid                                          NOT NULL PRIMARY KEY,
-distributionId varchar(1024) REFERENCES distributions ("id") NOT NULL,
-action   varchar(1024)                                 NOT NULL,
-status   task_status                                   NOT NULL DEFAULT 'in progess',
-retries  int                                           NOT NULL DEFAULT 0,
-metadata text                                          NOT NULL DEFAULT '',
-result   text                                          NOT NULL DEFAULT '',
-created  timestamp WITH TIME ZONE                      NOT NULL DEFAULT now(),
-updated  timestamp WITH TIME ZONE                      NOT NULL DEFAULT now(),
-started  timestamp WITH TIME ZONE,
-finished timestamp WITH TIME ZONE,
-deleted  bool                                          NOT NULL DEFAULT FALSE
-);
+      CREATE TABLE IF NOT EXISTS tasks
+      (
+        task            uuid                                                       NOT NULL PRIMARY KEY,
+        distribution_id uuid REFERENCES distributions ("distribution_id") NOT NULL,
+        action          varchar(1024)                                              NOT NULL,
+        state           varchar(128)                                               NOT NULL DEFAULT 'new',
+        retries         int                                                        NOT NULL DEFAULT 0,
+        result          text,
+        metadata        text,
 
-DROP TRIGGER IF EXISTS tasks_updated
-ON tasks;
+        created_at      timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        updated_at      timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
+        started_at      timestamp WITH TIME ZONE,
+        finished_at     timestamp WITH TIME ZONE,
+        deleted_at      timestamp WITH TIME ZONE
+      );
 
-CREATE TRIGGER tasks_updated
-BEFORE UPDATE
-ON tasks
-FOR EACH ROW EXECUTE PROCEDURE mark_updated_column();
-END
-$$
+      DROP TRIGGER IF EXISTS tasks_updated
+        ON tasks;
+
+      CREATE TRIGGER tasks_updated
+        BEFORE UPDATE
+        ON tasks
+        FOR EACH ROW
+      EXECUTE PROCEDURE mark_updated_column();
+    END
+    $$
 `
 
 const initServicesScript string = `
-INSERT INTO services (service, name, human_name, description, categories, beta, depreciated)
+INSERT INTO services (service_id, name, human_name, description, categories, beta, depreciated)
 VALUES ('3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
 'distribution',
 'Akkeris Cloudfront',
@@ -222,7 +220,7 @@ FALSE);
 `
 
 const initPlansScript string = `
-INSERT INTO plans (plan, service, name, human_name, description, categories)
+INSERT INTO plans (plan_id, service_id, name, human_name, description, categories)
 VALUES ('5eac120c-5303-4f55-8a62-46cde1b52d0b',
 '3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
 'dist',
