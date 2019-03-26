@@ -13,6 +13,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
@@ -25,57 +26,101 @@ func (s *AwsConfig) genBucketName() *string {
 	return &bucketName
 }
 
-func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) {
+func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) error {
 
-	glog.Infof("==== createS3Bucket [%s] ====", *cf.operationKey)
+	glog.Info("==== createS3Bucket ====")
 	svc := s3.New(s.sess)
-	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
-		msg := "error getting s3 session"
+		msg := "createS3Bucket: error getting s3 session"
 		glog.Errorf(msg)
-		cf.distChan <- errors.New(msg)
+		return errors.New(msg)
 	}
 
 	bucketName := s.genBucketName()
+
+	glog.Infof("createS3Bucket: bucket name: %s", bucketName)
 
 	s3in := &s3.CreateBucketInput{
 		Bucket: bucketName,
 	}
 
 	s3out, err := svc.CreateBucket(s3in)
+
 	if err != nil {
 		msg := fmt.Sprintf("error creating s3 bucket: %s", err.Error())
 		glog.Error(msg)
-		cf.distChan <- errors.New(msg)
-		return
+		return errors.New(msg)
 	}
 
 	fullname := strings.Replace(*s3out.Location, "http://", "", -1)
 	fullname = strings.Replace(fullname, "/", "", -1)
 
-	glog.Infof("bucket name: %s\n", *bucketName)
-
-	headBucketIn := &s3.HeadBucketInput{
-		Bucket: bucketName,
-	}
-
-	glog.Info(">>>> waiting for bucket <<<<")
-	err = svc.WaitUntilBucketExists(headBucketIn)
-
-	if err != nil {
-		glog.Errorf("error waiting for bucket %s: %s\n", *bucketName, err.Error())
-		cf.distChan <- err
-		return
-	}
-
 	cf.s3Bucket = &s3Bucket{
 		bucketURI:  s3out.Location,
 		bucketName: bucketName,
 		fullname:   aws.String(fullname),
-		originID:   aws.String("S3-" + *bucketName),
 	}
 
-	cf.distChan <- nil
+	origin, err := s.stg.AddOrigin(*cf.distributionID, *bucketName, *s3out.Location, "/", *cf.billingCode)
+
+	if err != nil {
+		msg := fmt.Sprintf("createS3Bucket: error adding origin: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	cf.s3Bucket.originID = &origin.OriginID
+
+	return nil
+}
+
+func (s *AwsConfig) isBucketReady(s3BucketIn *s3Bucket) bool {
+	getBucketLocationIn := &s3.GetBucketLocationInput{
+		Bucket: s3BucketIn.bucketName,
+	}
+
+	svc := s3.New(s.sess)
+
+	_, err := svc.GetBucketLocation(getBucketLocationIn)
+
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case "NoSuchBucket":
+				return false
+			default:
+				msg := fmt.Sprintf("isBucketReady: error checking bucket: %s", err.Error())
+				glog.Error(msg)
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (s *AwsConfig) getBucket(originID string) *s3Bucket {
+
+	origin, err := s.stg.GetOriginByID(originID)
+
+	if err != nil {
+		msg := fmt.Sprintf("getBucket: error finding bucket: %s", err.Error())
+		glog.Error(msg)
+		return nil
+	}
+
+	s3BucketOut := &s3Bucket{
+		bucketName: &origin.BucketName,
+		bucketURI:  &origin.BucketUrl,
+		originID:   &origin.OriginID,
+		iAMUser: &iAMUser{
+			userName:  &origin.IAMUser.String,
+			accessKey: &origin.AccessKey.String,
+			secretKey: &origin.SecretKey.String,
+		},
+	}
+
+	return s3BucketOut
 }
 
 func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
@@ -83,7 +128,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 
 	policy, _ := json.Marshal(map[string]interface{}{
 		"Version": "2012-10-17",
-		"Id":      fmt.Sprintf("Policy%s", *cf.distributionId),
+		"Id":      fmt.Sprintf("Policy%s", *cf.cloudfrontID),
 		"Statement": []map[string]interface{}{
 			{
 				"Sid":    fmt.Sprintf("Stmt%s", *cf.originAccessIdentity),
@@ -97,9 +142,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		},
 	})
 
-	glog.Infof("\nbucket policy: %s\n", policy)
 	svc := s3.New(s.sess)
-	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := "error getting s3 session"
 		glog.Error(msg)

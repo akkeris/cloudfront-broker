@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/golang/glog"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -15,11 +16,11 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 	var err error
 	var iamIn *iam.CreateUserInput
 
-	glog.Infof("==== createIAMUser [%s] ====", *cf.operationKey)
+	glog.Infof("==== createIAMUser ====")
 
 	svc := iam.New(s.sess)
 	if svc == nil {
-		msg := fmt.Sprintf("error getting iam session: %s", err.Error())
+		msg := fmt.Sprintf("createIAMUser: error getting iam session: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -31,50 +32,98 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 	})
 
 	iamIn = &iam.CreateUserInput{
-		UserName: cf.s3Bucket.name,
+		UserName: cf.s3Bucket.bucketName,
 		Tags:     tags,
 	}
 
 	iamOut, err := svc.CreateUser(iamIn)
 
 	if err != nil {
-		msg := fmt.Sprintf("error creating iam user: %s", err.Error())
+		msg := fmt.Sprintf("createIAMUSer: error creating iam user: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
+	}
+
+	cf.s3Bucket.iAMUser = &iAMUser{
+		userName:  iamOut.User.UserName,
+		arn:       iamOut.User.Arn,
+		accessKey: nil,
+		secretKey: nil,
+	}
+
+	err = s.stg.AddIAMUser(*cf.s3Bucket.originID, *cf.s3Bucket.iAMUser.userName)
+
+	if err != nil {
+		msg := fmt.Sprintf("createIAMUser: error adding iam user: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (s *AwsConfig) isIAMUserReady(userName string) (bool, error) {
+	glog.Info("==== isIAMUserReady ====")
+
+	svc := iam.New(s.sess)
+	if svc == nil {
+		msg := "checkIAMUser: error getting iam session"
+		glog.Error(msg)
+		return false, errors.New(msg)
 	}
 
 	giamIn := &iam.GetUserInput{
-		UserName: iamOut.User.UserName,
+		UserName: aws.String(userName),
 	}
 
-	err = svc.WaitUntilUserExists(giamIn)
+	giamOut, err := svc.GetUser(giamIn)
 	if err != nil {
-		msg := fmt.Sprintf("error waiting for iam user: %s", err.Error())
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("checkIAMUser: iam user not found: %s", err.Error())
+				glog.Info(msg)
+				return false, errors.New(aerr.Code())
+			default:
+				msg := fmt.Sprintf("checkIAMUser: error getting iam user: %s", aerr.Error())
+				glog.Error(msg)
+				return false, errors.New(msg)
+			}
+		}
+	}
+
+	glog.Infof("isIAMUserReady: iam username: %s", *giamOut.User.UserName)
+
+	return true, nil
+}
+
+func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
+	glog.Info("==== createAccessKey ====")
+
+	svc := iam.New(s.sess)
+	if svc == nil {
+		msg := "createAccessKey: error getting iam session"
 		glog.Error(msg)
 		return errors.New(msg)
 	}
 
-	glog.Infof("iam username: %s", *giamIn.UserName)
-
 	accessKeyInput := &iam.CreateAccessKeyInput{
-		UserName: iamOut.User.UserName,
+		UserName: cf.s3Bucket.iAMUser.userName,
 	}
 
 	accessKeyOut, err := svc.CreateAccessKey(accessKeyInput)
 
 	if err != nil {
-		msg := fmt.Sprintf("error creating access key: %s", err.Error())
+		msg := fmt.Sprintf("createAccessKey: error creating access key: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
 
-	glog.Infof("access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
-	cf.iAMUser = &iAMUser{
-		userName:  iamOut.User.UserName,
-		arn:       iamOut.User.Arn,
-		accessKey: accessKeyOut.AccessKey.AccessKeyId,
-		secretKey: accessKeyOut.AccessKey.SecretAccessKey,
-	}
+	glog.Infof("createAccessKey: access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
+	cf.s3Bucket.iAMUser.accessKey = accessKeyOut.AccessKey.AccessKeyId
+	cf.s3Bucket.iAMUser.secretKey = accessKeyOut.AccessKey.SecretAccessKey
+
+	err = s.stg.AddAccessKey(*cf.s3Bucket.originID, *cf.s3Bucket.iAMUser.accessKey, *cf.s3Bucket.iAMUser.secretKey)
 
 	var policyIn *iam.PutUserPolicyInput
 	// var policyOut *iam.PutUserPolicyOutput
@@ -98,25 +147,25 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 				"Effect": "Allow",
 				"Action": "s3:*",
 				"Resource": []string{
-					fmt.Sprintf("arn:aws:s3:::%s", *cf.s3Bucket.name),
-					fmt.Sprintf("arn:aws:s3:::%s/*", *cf.s3Bucket.name),
+					fmt.Sprintf("arn:aws:s3:::%s", *cf.s3Bucket.bucketName),
+					fmt.Sprintf("arn:aws:s3:::%s/*", *cf.s3Bucket.bucketName),
 				},
 			},
 		},
 	})
 
-	cf.iAMUser.policyName = aws.String(fmt.Sprintf("%s-policy", *cf.s3Bucket.name))
+	cf.s3Bucket.iAMUser.policyName = aws.String(fmt.Sprintf("%s-policy", *cf.s3Bucket.bucketName))
 
 	policyIn = &iam.PutUserPolicyInput{
-		PolicyName:     cf.iAMUser.policyName,
+		PolicyName:     cf.s3Bucket.iAMUser.policyName,
 		PolicyDocument: aws.String(string(userPolicy)),
-		UserName:       cf.iAMUser.userName,
+		UserName:       cf.s3Bucket.iAMUser.userName,
 	}
 
 	_, err = svc.PutUserPolicy(policyIn)
 
 	if err != nil {
-		msg := fmt.Sprintf("error attaching policy: %s", err.Error())
+		msg := fmt.Sprintf("createAccessKey: error attaching policy: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -138,8 +187,8 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 	}
 
 	delKeyInput := &iam.DeleteAccessKeyInput{
-		UserName:    cf.iAMUser.userName,
-		AccessKeyId: cf.iAMUser.accessKey,
+		UserName:    cf.s3Bucket.iAMUser.userName,
+		AccessKeyId: cf.s3Bucket.iAMUser.accessKey,
 	}
 
 	glog.Infof("deleteing access key for: %s\n", *delKeyInput.UserName)
@@ -153,12 +202,12 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 	}
 
 	delUserInput := &iam.DeleteUserInput{
-		UserName: cf.iAMUser.userName,
+		UserName: cf.s3Bucket.iAMUser.userName,
 	}
 
 	delUserPolicy := &iam.DeleteUserPolicyInput{
-		UserName:   cf.iAMUser.userName,
-		PolicyName: cf.iAMUser.policyName,
+		UserName:   cf.s3Bucket.iAMUser.userName,
+		PolicyName: cf.s3Bucket.iAMUser.policyName,
 	}
 
 	_, err = svc.DeleteUserPolicy(delUserPolicy)

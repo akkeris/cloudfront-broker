@@ -39,7 +39,7 @@ var options struct {
 
 func init() {
 	fmt.Println(">>>>> init <<<<<")
-	flag.IntVar(&options.Port, "port", 0, "use '--port' option to specify the port for broker to listen on")
+	flag.IntVar(&options.Port, "port", 5000, "use '--port' option to specify the port for broker to listen on")
 	flag.BoolVar(&options.Insecure, "insecure", false, "use --insecure to use HTTP vs HTTPS.")
 	flag.StringVar(&options.TLSCertFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert).")
 	flag.StringVar(&options.TLSKeyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
@@ -47,12 +47,13 @@ func init() {
 	flag.StringVar(&options.TLSKey, "tlsKey", "", "base-64 encoded PEM block to use as the private key matching the TLS certificate.")
 	flag.BoolVar(&options.AuthenticateK8SToken, "authenticate-k8s-token", false, "option to specify if the broker should validate the bearer auth token with kubernetes")
 	flag.StringVar(&options.KubeConfig, "kube-config", "", "specify the kube config path to be used")
+
 	// glog to stderr
 	flag.Set("logtostderr", "true")
 
 	broker.AddFlags(&options.Options)
 	flag.Parse()
-	fmt.Printf("options: %+v\n", options)
+	// fmt.Printf("options: %+v\n", options)
 }
 
 func main() {
@@ -82,18 +83,21 @@ func runWithContext(ctx context.Context) error {
 
 	var port string
 	port = strconv.Itoa(options.Port)
-	if options.Port == 0 {
-		if os.Getenv("PORT") != "" {
-			port = os.Getenv("PORT")
-		} else {
-			fmt.Println("port not set, use --port or env var PORT")
-			return nil
-		}
+	if os.Getenv("PORT") != "" {
+		port = os.Getenv("PORT")
+	} else {
+		fmt.Println("port not set, use --port or env var PORT")
+		return nil
 	}
 
 	businessLogic, err := broker.NewBusinessLogic(ctx, options.Options)
 	if err != nil {
 		return err
+	}
+
+	if options.BackgroundTasksOnly {
+		businessLogic.RunTasksInBackground(ctx)
+		return nil
 	}
 
 	addr := ":" + port
@@ -127,6 +131,9 @@ func runWithContext(ctx context.Context) error {
 		// Use TokenReviewMiddleware.
 		s.Router.Use(tr.Middleware)
 	}
+
+	glog.Info("Starting background tasks")
+	go businessLogic.RunTasksInBackground(ctx)
 
 	glog.Infof("Starting broker!")
 

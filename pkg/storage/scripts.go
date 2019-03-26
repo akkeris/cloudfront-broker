@@ -29,23 +29,6 @@ from plans join services on services.service_id = plans.service_id
 where services.deleted_at is null and plans.deleted_at is null
 `
 
-const taskQuery string = `
-select
-  task.task,
-  task.distributionId,
-  task.action,
-  task.status,
-  task.retries,
-  task.metadata,
-  task.result,
-  task.created_at,
-  task.updated_at,
-  task.started_at,
-  task.finished_at,
-from tasks join distributions on distributions.distributin_id = task.distribution_id
-where distributions.deleted_at is null and tasks.deleted_at is null
-`
-
 const createScript string = `
 DO
   $$
@@ -76,10 +59,10 @@ DO
       (
         service_id  uuid                     NOT NULL PRIMARY KEY,
         name        alpha_numeric            NOT NULL UNIQUE,
-        human_name  text                     NOT NULL,
-        description text                     NOT NULL,
-        categories  varchar(1024)            NOT NULL DEFAULT '',
-        image       varchar(1024)            NOT NULL DEFAULT '',
+        human_name  text,
+        description text,
+        categories  varchar(1024),
+        image       varchar(1024),
 
         beta        boolean                  NOT NULL DEFAULT FALSE,
         depreciated boolean                  NOT NULL DEFAULT FALSE,
@@ -103,9 +86,9 @@ DO
         plan_id     uuid                                    NOT NULL PRIMARY KEY,
         service_id  uuid REFERENCES services ("service_id") NOT NULL,
         name        alpha_numeric                           NOT NULL UNIQUE,
-        human_name  text                                    NOT NULL,
-        description text                                    NOT NULL,
-        categories  text                                    NOT NULL DEFAULT '',
+        human_name  text,
+        description text,
+        categories  text,
         free        boolean                                 NOT NULL DEFAULT FALSE,
         cost_cents  cents                                   NOT NULL DEFAULT 1000,
         cost_unit   costunit                                NOT NULL DEFAULT 'month',
@@ -136,6 +119,7 @@ DO
         cloudfront_id   varchar(200)                      UNIQUE,
         cloudfront_url  varchar(200),
         origin_access_identity varchar(200),
+        caller_reference varchar(200)                     NOT NULL,
         claimed         boolean                           NOT NULL DEFAULT FALSE,
         status          varchar(1024)                     NOT NULL DEFAULT 'new',
         billing_code    varchar(200),
@@ -159,11 +143,13 @@ DO
         origin_id  uuid                     NOT NULL PRIMARY KEY,
         distribution_id uuid REFERENCES distributions ("distribution_id"),
 
-        bucket     varchar(1024)            NOT NULL UNIQUE,
+        bucket_name     varchar(1024)            NOT NULL UNIQUE,
         bucket_url varchar(1024)            NOT NULL,
+        origin_path varchar(1024)           NOT NULL DEFAULT '/',
         iam_user   alpha_numeric,
         access_key varchar(128),
         secret_key varchar(128),
+        billing_code varchar(128),
 
         created_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
         updated_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -181,13 +167,14 @@ DO
 
       CREATE TABLE IF NOT EXISTS tasks
       (
-        task            uuid                                                       NOT NULL PRIMARY KEY,
+        task_id         uuid  NOT NULL PRIMARY KEY,
         distribution_id uuid REFERENCES distributions ("distribution_id") NOT NULL,
-        action          varchar(1024)                                              NOT NULL,
-        state           varchar(128)                                               NOT NULL DEFAULT 'new',
-        retries         int                                                        NOT NULL DEFAULT 0,
+        status          varchar(128),
+        action          varchar(128) NOT NULL DEFAULT 'new',
+        retries         int NOT NULL DEFAULT 0,
         result          text,
         metadata        text,
+        operation_key   varchar(128),
 
         created_at      timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
         updated_at      timestamp WITH TIME ZONE NOT NULL DEFAULT now(),

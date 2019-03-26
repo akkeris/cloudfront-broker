@@ -1,25 +1,35 @@
 // Author: ned.hanks
 // Date Created: ned.hanks
 // Project: cloudfront-broker
+
+// Package that interacts with AWS for managing the cloudrfront distributions and associate services.
+// The package requires these environmental variables:
+//    NAME_PREFIX - prefix for S3 buckets, IAM usernames, ... This is to make unique names
+//    REGION - region to create S3 buckets
+//    AWS_ACCESS_KEY
+//    AWS_SECRET_ACCESS_KEY
+//    WAIT_SECS - seconds between each task run
+
 package service
 
 import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
+
+	"cloudfront-broker/pkg/storage"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/golang/glog"
 )
 
-func Init(namePrefix string, waitCnt int, waitSecs time.Duration) (*AwsConfig, error) {
+func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64) (*AwsConfig, error) {
 	c := AwsConfig{
 		namePrefix: namePrefix,
-		waitCnt:    waitCnt,
 		waitSecs:   waitSecs,
 		conf:       &aws.Config{},
+		stg:        stg,
 	}
 
 	region := os.Getenv("REGION")

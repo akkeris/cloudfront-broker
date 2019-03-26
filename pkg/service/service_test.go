@@ -4,28 +4,30 @@ import (
 	"os"
 	"testing"
 
+	"cloudfront-broker/pkg/storage"
+
 	"github.com/nu7hatch/gouuid"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestCloudFrontService(t *testing.T) {
 	Convey("AWS Cloudfront Services", t, func() {
-		var c *AwsConfigSpec
+		var c *AwsConfig
 		var err error
-		var in *cloudFrontInstanceSpec
+		var in *cloudFrontInstance
 		devTesting := "devTesting"
 		dist := "dist"
 		nUuid, _ := uuid.NewV4()
 		sUuid := nUuid.String()
 
-		in = &cloudFrontInstanceSpec{
+		in = &cloudFrontInstance{
 			billingCode:     &devTesting,
 			callerReference: &sUuid,
-			planId:          &dist,
+			planID:          &dist,
 			distChan:        make(chan error),
 		}
 
-		c, err = Init(os.Getenv("NAME_PREFIX"), 10, 150)
+		c, err = Init(&storage.PostgresStorage{}, os.Getenv("NAME_PREFIX"), 10)
 
 		So(c, ShouldNotBeNil)
 		So(err, ShouldBeNil)
@@ -39,26 +41,26 @@ func TestCloudFrontService(t *testing.T) {
 			err = <-in.distChan
 
 			So(err, ShouldBeNil)
-			So(in.s3Bucket.name, ShouldNotBeNil)
+			So(in.s3Bucket.bucketName, ShouldNotBeNil)
 			So(in.s3Bucket, ShouldNotBeNil)
-			So(*in.s3Bucket.name, ShouldNotBeBlank)
+			So(*in.s3Bucket.bucketName, ShouldNotBeBlank)
 
-			Printf("\ns3 name: %s\n", *in.s3Bucket.name)
-			Printf("s3 uri: %s\n", *in.s3Bucket.uri)
-			Printf("s3 id: %s\n", *in.s3Bucket.id)
+			Printf("\ns3 name: %s\n", *in.s3Bucket.bucketName)
+			Printf("s3 uri: %s\n", *in.s3Bucket.bucketURI)
+			Printf("s3 id: %s\n", *in.s3Bucket.originID)
 
 			Convey("create iam user", func() {
 				err = c.createIAMUser(in)
 
 				So(err, ShouldBeNil)
-				So(in.iAMUser, ShouldNotBeNil)
-				So(*in.iAMUser.userName, ShouldNotBeBlank)
-				So(*in.iAMUser.policyName, ShouldNotBeBlank)
+				So(in.s3Bucket.iAMUser, ShouldNotBeNil)
+				So(*in.s3Bucket.iAMUser.userName, ShouldNotBeBlank)
+				So(*in.s3Bucket.iAMUser.policyName, ShouldNotBeBlank)
 
-				Printf("iam user: %s\n", *in.iAMUser.userName)
-				Printf("iam access key: %s\n", *in.iAMUser.accessKey)
-				Printf("iam secret key: %s\n", *in.iAMUser.secretKey)
-				Printf("policy name: %s\n", *in.iAMUser.policyName)
+				Printf("iam user: %s\n", *in.s3Bucket.iAMUser.userName)
+				Printf("iam access key: %s\n", *in.s3Bucket.iAMUser.accessKey)
+				Printf("iam secret key: %s\n", *in.s3Bucket.iAMUser.secretKey)
+				Printf("policy name: %s\n", *in.s3Bucket.iAMUser.policyName)
 
 				Convey("create origin access idenity", func() {
 					go c.createOriginAccessIdentity(in)
@@ -75,10 +77,10 @@ func TestCloudFrontService(t *testing.T) {
 						err = <-in.distChan
 
 						So(err, ShouldBeNil)
-						So(in.distributionId, ShouldNotBeNil)
-						So(*in.distributionId, ShouldNotBeBlank)
+						So(in.cloudfrontID, ShouldNotBeNil)
+						So(*in.cloudfrontID, ShouldNotBeBlank)
 
-						Printf("\ndistribution id: %s\n", *in.distributionId)
+						Printf("\ndistribution id: %s\n", *in.cloudfrontID)
 
 						Convey("add bucket policy", func() {
 							err = c.addBucketPolicy(in)

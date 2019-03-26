@@ -4,67 +4,88 @@
 package storage
 
 import (
+	"database/sql"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 type Service struct {
 	ServiceID   string
 	Name        string
-	HumanName   string
-	Description string
-	Catagories  string
-	Image       string
+	HumanName   sql.NullString
+	Description sql.NullString
+	Catagories  sql.NullString
+	Image       sql.NullString
 	Beta        bool
 	Deprecated  bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   pq.NullTime
 }
 
 type Plan struct {
 	PlanID      string
 	ServiceID   string
 	Name        string
-	HumanName   string
-	Description string
-	Categories  string
+	HumanName   sql.NullString
+	Description sql.NullString
+	Catagories  sql.NullString
 	Free        bool
 	CostCents   uint
 	CostUnit    string
 	Beta        bool
 	Depreciated bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   pq.NullTime
+}
+
+type Distribution struct {
+	DistributionID       string
+	PlanID               string
+	CloudfrontID         sql.NullString
+	CloudfrontUrl        sql.NullString
+	OriginAccessIdentity sql.NullString
+	Claimed              bool
+	BillingCode          sql.NullString
+	Status               string
+	CallerReference      string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	DeletedAt            pq.NullTime
+
+	Origins *[]Origin
+	Task    *[]Task
 }
 
 type Origin struct {
 	OriginID       string
 	DistributionID string
 	BucketName     string
-	IAMUser        string
-	AccessKey      string
-	SecretKey      string
-	OriginUrl      string
+	BucketUrl      string
 	OriginPath     string
-	BillingCode    string
-}
-
-type Distribution struct {
-	DistributionID  string
-	PlanID          string
-	CloudfrontID    string
-	DistributionUrl string
-	BillingCode     string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       time.Time
+	IAMUser        sql.NullString
+	AccessKey      sql.NullString
+	SecretKey      sql.NullString
+	BillingCode    sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      pq.NullTime
 }
 
 type Task struct {
-	TaskId         string
-	DistributionId string
+	TaskID         string
+	DistributionID string
 	Action         string
 	Status         string
+	OperationKey   sql.NullString
 	Retries        int
-	Result         string
+	Result         sql.NullString
+	Metadata       sql.NullString
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-	StartedAt      time.Time
-	FinishedAt     time.Time
-	DeletedAt      time.Time
+	StartedAt      pq.NullTime
+	FinishedAt     pq.NullTime
+	DeletedAt      pq.NullTime
 }

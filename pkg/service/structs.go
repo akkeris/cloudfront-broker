@@ -4,7 +4,7 @@
 package service
 
 import (
-	"time"
+	"cloudfront-broker/pkg/storage"
 
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 
@@ -16,30 +16,31 @@ type AwsConfig struct {
 	namePrefix string
 	conf       *aws.Config
 	sess       *session.Session
-	waitCnt    int
-	waitSecs   time.Duration
+	waitSecs   int64
+
+	stg *storage.PostgresStorage
 }
 
 type cloudFrontInstance struct {
-	instanceId           *string // osb instance id
+	distributionID       *string
 	billingCode          *string
-	planId               *string
+	planID               *string
 	serviceId            *string
-	distributionId       *string // cloudfront id
-	distributionURL      *string
+	cloudfrontID         *string
+	cloudfrontURL        *string
 	callerReference      *string
 	originAccessIdentity *string
-	iAMUser              *iAMUser
 	s3Bucket             *s3Bucket
 	operationKey         *string
 	distChan             chan error
 }
 
 type s3Bucket struct {
+	originID   *string
 	bucketName *string
 	fullname   *string
 	bucketURI  *string
-	originID   *string
+	iAMUser    *iAMUser
 }
 
 type iAMUser struct {
