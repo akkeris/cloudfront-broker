@@ -8,9 +8,11 @@ import (
 
 	"cloudfront-broker/pkg/storage"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/golang/glog"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
+
+	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
 const (
@@ -21,22 +23,23 @@ const (
 	ActionCreateOriginAccessIdentity string = "create-origin-access-identity"
 	ActionCreateDistribution         string = "create-distribution"
 	ActionAddBucketPolicy            string = "add-bucket-policy"
-	ActionDistributionDeployed       string = "distribution-deployed"
+	ActionIsDistributionDeployed     string = "is-distribution-deployed"
+
 	ActionDeleteNew                  string = "delete-new"
+	ActionDisableDistribution        string = "disable-distribution"
 	ActionDeleteOrigin               string = "delete-origin"
 	ActionDeleteIAMUser              string = "delete-iam-user"
-	ActionDisableDistribution        string = "disable-distribution"
 	ActionDeleteDistribution         string = "delete-distribution"
 	ActionDeleteOriginAccessIdentity string = "delete-origin-access-identity"
 	ActionDone                       string = "done"
-	ActionFailed                     string = "failed"
 
-	StatusNew      string = "new"
-	StatusPending  string = "pending"
-	StatusDeployed string = "deployed"
-	StatusDeleted  string = "deleted"
-	StatusFailed   string = "failed"
-	StatusFinished string = "finished"
+	StatusNew       string = "new"
+	StatusPending   string = "pending"
+	StatusDisabling string = "disabling"
+	StatusDeployed  string = "deployed"
+	StatusDeleted   string = "deleted"
+	StatusFailed    string = "failed"
+	StatusFinished  string = "finished"
 )
 
 var NextAction = map[string]string{
@@ -46,8 +49,9 @@ var NextAction = map[string]string{
 	ActionCreateAccessKey:            ActionCreateOriginAccessIdentity,
 	ActionCreateOriginAccessIdentity: ActionCreateDistribution,
 	ActionCreateDistribution:         ActionAddBucketPolicy,
-	ActionAddBucketPolicy:            ActionDistributionDeployed,
-	ActionDistributionDeployed:       ActionDone,
+	ActionAddBucketPolicy:            ActionIsDistributionDeployed,
+	ActionIsDistributionDeployed:     ActionDone,
+
 	ActionDeleteNew:                  ActionDisableDistribution,
 	ActionDisableDistribution:        ActionDeleteOrigin,
 	ActionDeleteOrigin:               ActionDeleteIAMUser,
@@ -65,23 +69,24 @@ type IAMUser struct {
 	UserName string
 }
 
-func curTaskFailed(curTask *storage.Task, msg string) {
-	curTask.Status = StatusFailed
-	curTask.Result.String = OperationFailed
-	curTask.Result.Valid = true
-	curTask.Metadata.String = msg
-	curTask.Metadata.Valid = true
-	curTask.FinishedAt.Time = time.Now()
-	curTask.FinishedAt.Valid = true
-	curTask.Action = ActionFailed
+func curTaskStop(curTask *storage.Task) *storage.Task {
+	now := time.Now()
+	curTask.FinishedAt = storage.SetNullTime(&now)
+	return curTask
 }
 
-func curTaskFinished(curTask *storage.Task) {
+func curTaskFailed(curTask *storage.Task, msg string) *storage.Task {
+	curTask.Status = StatusFailed
+	curTask.Result = storage.SetNullString(storage.StatusFailed)
+	curTask.Metadata = storage.SetNullString(msg)
+	return curTaskStop(curTask)
+}
+
+func curTaskFinished(curTask *storage.Task, result string, msg string) *storage.Task {
 	curTask.Status = StatusFinished
-	curTask.Result.String = OperationSucceeded
-	curTask.Result.Valid = true
-	curTask.FinishedAt.Time = time.Now()
-	curTask.FinishedAt.Valid = true
+	curTask.Result = storage.SetNullString(result)
+	curTask.Metadata = storage.SetNullString(msg)
+	return curTaskStop(curTask)
 }
 
 func setTask(task *storage.Task, action string, status string, result *string, metadata *string, finished bool) *storage.Task {
@@ -118,32 +123,37 @@ func setTask(task *storage.Task, action string, status string, result *string, m
 	return task
 }
 
-func (svc *AwsConfig) GetTaskState(distributionID string, operationKey string) (*OperationState, error) {
-	glog.Infof("===== GetTaskState [%s] =====", operationKey)
+func (svc *AwsConfig) GetTaskState(distributionID string) (*osb.LastOperationResponse, error) {
+	glog.Infof("===== GetTaskState [%s] =====", distributionID)
 
-	task, err := svc.stg.GetTaskByDistribution(distributionID, operationKey)
+	task, err := svc.stg.GetTaskByDistribution(distributionID)
 
 	if err != nil {
-		msg := fmt.Sprintf("GetTaskState [%s]: error getting task", err.Error())
+		msg := fmt.Sprintf("GetTaskState [%s]: error getting task: %s", distributionID, err.Error())
 		glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
-	taskState := &OperationState{}
+	taskState := &osb.LastOperationResponse{
+		State:       osb.StateFailed,
+		Description: aws.String("process failed"),
+	}
 
 	switch task.Status {
 	case StatusNew:
 		fallthrough
 	case StatusPending:
-		taskState.Status = &OperationInProgress
+		taskState.State = osb.StateInProgress
 		taskState.Description = &task.Action
 	case StatusDeployed:
 		fallthrough
 	case StatusDeleted:
-		taskState.Status = &OperationSucceeded
+		fallthrough
+	case StatusFinished:
+		taskState.State = osb.StateSucceeded
 		taskState.Description = &task.Action
 	default:
-		taskState.Status = &OperationFailed
+		taskState.State = osb.StateFailed
 		taskState.Description = &task.Result.String
 	}
 
@@ -169,7 +179,6 @@ func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 		OperationKey:   sql.NullString{String: *cf.operationKey, Valid: true},
 		Result:         sql.NullString{String: OperationInProgress, Valid: true},
 		Metadata:       sql.NullString{String: "", Valid: false},
-		StartedAt:      pq.NullTime{Time: time.Now(), Valid: true},
 	}
 
 	task, err = svc.stg.AddTask(task)
@@ -189,17 +198,16 @@ func (svc *AwsConfig) ActionCreateOrigin(curTask *storage.Task, cf *cloudFrontIn
 	if err := svc.createS3Bucket(cf); err != nil {
 		msg := fmt.Sprintf("ActionCreateOrigin[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, "error creating s3 bucket for origin")
-		return nil, errors.New(msg)
+		curTask = curTaskFailed(curTask, "error creating s3 bucket for origin")
+		return curTask, errors.New(msg)
 	}
 
+	/*
+	   encode originID into json to store as metadata
+	*/
 	originID := &OriginID{OriginID: *cf.s3Bucket.originID}
 	originIDb, _ := json.Marshal(originID)
-	curTask.Metadata = sql.NullString{
-		String: string(originIDb),
-		Valid:  true,
-	}
-
+	curTask.Metadata = storage.SetNullString(string(originIDb))
 	curTask.Action = NextAction[curTask.Action]
 	return curTask, nil
 }
@@ -217,7 +225,7 @@ func (svc *AwsConfig) ActionCreateIAMUser(curTask *storage.Task, cf *cloudFrontI
 			if err := svc.createIAMUser(cf); err != nil {
 				msg := fmt.Sprintf("ActionCreateIAMUser[%s]: error: %s", *cf.operationKey, err.Error())
 				glog.Error(msg)
-				curTaskFailed(curTask, "error creating iam user")
+				curTask = curTaskFailed(curTask, "error creating iam user")
 				return curTask, errors.New(msg)
 			}
 		} else {
@@ -230,6 +238,7 @@ func (svc *AwsConfig) ActionCreateIAMUser(curTask *storage.Task, cf *cloudFrontI
 		OriginID: *cf.s3Bucket.originID,
 		UserName: *cf.s3Bucket.iAMUser.userName,
 	}
+
 	iAMUserb, _ := json.Marshal(iAMUser)
 	curTask.Metadata = sql.NullString{
 		String: string(iAMUserb),
@@ -254,18 +263,16 @@ func (svc *AwsConfig) ActionCreateAccessKey(curTask *storage.Task, cf *cloudFron
 		if err != nil {
 			msg := fmt.Sprintf("ActionCreateAccessKey[%s]: error: %s", *cf.operationKey, err.Error())
 			glog.Error(msg)
-			curTaskFailed(curTask, "error creating access key")
+			curTask = curTaskFailed(curTask, "error creating access key")
 			return curTask, errors.New(msg)
 		} else {
-			curTask.Result.String = ""
-			curTask.Result.Valid = false
-			curTask.Metadata.String = ""
-			curTask.Metadata.Valid = false
+			curTask.Result = storage.SetNullString("")
+			curTask.Metadata = storage.SetNullString("")
 		}
 	} else if err != nil {
 		msg := fmt.Sprintf("ActionCreateAccessKey[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, "error checking iam user")
+		curTask = curTaskFailed(curTask, "error checking iam user")
 		return curTask, errors.New(msg)
 	} else {
 		curTask.Retries++
@@ -284,7 +291,7 @@ func (svc *AwsConfig) ActionCreateOriginAccessIdentity(curTask *storage.Task, cf
 	if err != nil {
 		msg := fmt.Sprintf("ActionCreateOriginAccessIdentity[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, "error creating origin access identity")
+		curTask = curTaskFailed(curTask, "error creating origin access identity")
 		return curTask, errors.New(msg)
 	}
 
@@ -299,7 +306,7 @@ func (svc *AwsConfig) ActionCreateDistribution(curTask *storage.Task, cf *cloudF
 	if err != nil {
 		msg := fmt.Sprintf("ActionCreateDistribution[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, "error creating distribution")
+		curTask = curTaskFailed(curTask, "error creating distribution")
 		return curTask, errors.New(msg)
 	}
 
@@ -313,7 +320,7 @@ func (svc *AwsConfig) ActionAddBucketPolicy(curTask *storage.Task, cf *cloudFron
 	if err := svc.addBucketPolicy(cf); err != nil {
 		msg := fmt.Sprintf("ActionAddBucketPolicy[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, "error adding bucket policy")
+		curTask = curTaskFailed(curTask, "error adding bucket policy")
 		return curTask, errors.New(msg)
 	}
 
@@ -321,14 +328,14 @@ func (svc *AwsConfig) ActionAddBucketPolicy(curTask *storage.Task, cf *cloudFron
 	return curTask, nil
 }
 
-func (svc *AwsConfig) ActionDistributionDeployed(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Info("===== ActionDistributionDeployed [%s] =====", *cf.operationKey)
+func (svc *AwsConfig) ActionIsDistributionDeployed(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
+	glog.Info("===== ActionIsDistributionDeployed [%s] =====", *cf.operationKey)
 	distOut, err := svc.getCloudfrontDistribution(cf)
 
 	if err != nil {
 		msg := fmt.Sprintf("ActionEnableDistribution[%s]: error getting distribution enabled flag: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
-		curTaskFailed(curTask, msg)
+		curTask = curTaskFinished(curTask, StatusFailed, msg)
 		err = svc.stg.UpdateDistributionStatus(*cf.distributionID, StatusFailed)
 		return curTask, errors.New(msg)
 	} else if *distOut.Distribution.Status != "Deployed" {
@@ -338,8 +345,105 @@ func (svc *AwsConfig) ActionDistributionDeployed(curTask *storage.Task, cf *clou
 	}
 
 	err = svc.stg.UpdateDistributionStatus(*cf.distributionID, StatusDeployed)
-	curTaskFinished(curTask)
+	curTask = curTaskFinished(curTask, StatusDeployed, "cloudfront distribution created and deployed")
 	curTask.Action = NextAction[curTask.Action]
+
+	return curTask, nil
+}
+
+func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
+	glog.Infof("===== ActionDeleteNew [%s] =====", *cf.operationKey)
+
+	err := svc.stg.UpdateDistributionStatus(*cf.distributionID, StatusDisabling)
+	if err != nil {
+		msg := fmt.Sprintf("ActionDeleteNew: error updating distribution status: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	task := &storage.Task{
+		DistributionID: *cf.distributionID,
+		Action:         NextAction[ActionDeleteNew],
+		Status:         StatusNew,
+		Retries:        0,
+		// OperationKey:   sql.NullString{String: *cf.operationKey, Valid: true},
+		OperationKey: storage.SetNullString(*cf.operationKey),
+		Result:       storage.SetNullString(OperationInProgress),
+		Metadata:     storage.SetNullString(""),
+	}
+
+	task, err = svc.stg.AddTask(task)
+
+	if err != nil {
+		msg := fmt.Sprintf("ActionDeleteNew: error adding task: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (svc *AwsConfig) ActionDisableDistribution(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
+	glog.Info("===== ActionDisableDistribution [%s] =====", *cf.operationKey)
+
+	_, err := svc.getCloudfrontDistribution(cf)
+
+	if err != nil {
+		msg := fmt.Sprintf("ActionDisableDistribution [%s]: getting distribution from aws: %s", cf.operationKey, err.Error())
+		curTask = curTaskFailed(curTask, "cloudfront distribution error")
+		glog.Error(msg)
+		return curTask, errors.New(msg)
+	}
+
+	err = svc.disableCloudfrontDistribution(cf)
+	if err != nil {
+		msg := fmt.Sprintf("ActionDisableDistribution [%s]: getting disabling distribution: %s", cf.operationKey, err.Error())
+		curTask = curTaskFailed(curTask, "error disabling distribution")
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	curTask.Action = NextAction[curTask.Action]
+
+	return curTask, nil
+}
+
+func (svc *AwsConfig) ActionDeleteOrigin(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
+	glog.Info("===== ActionDeleteOrigin [%s] =====", *cf.operationKey)
+
+	err := svc.deleteS3Bucket(cf)
+	if err != nil {
+		msg := fmt.Sprintf("ActionDeleteOrigin [%s]: deleting s3 bucket: %s", cf.operationKey, err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	curTask.Action = NextAction[curTask.Action]
+	return curTask, nil
+}
+
+func (svc *AwsConfig) ActionDeleteIAMUser(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
+	glog.Info("===== ActionDeleteIAMUser [%s] =====", *cf.operationKey)
+
+	err := svc.deleteIAMUser(cf)
+	if err != nil {
+		msg := fmt.Sprintf("ActionDeleteIAMUser [%s]: deleting s3 bucket: %s", cf.operationKey, err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	return curTask, nil
+}
+
+func (svc *AwsConfig) ActionDeleteDistribution(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
+	glog.Info("===== ActionDeleteDistribution [%s] =====", *cf.operationKey)
+
+	err := svc.deleteIAMUser(cf)
+	if err != nil {
+		msg := fmt.Sprintf("ActionDeleteIAMUser [%s]: deleting s3 bucket: %s", cf.operationKey, err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
 
 	return curTask, nil
 }
@@ -377,16 +481,21 @@ func (svc *AwsConfig) RunTasks() {
 		switch curTask.Action {
 		case ActionCreateOrigin:
 			glog.Infof(">>>>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			if curTask, err = svc.ActionCreateOrigin(curTask, cf); err != nil {
+			now := time.Now()
+			curTask.StartedAt = storage.SetNullTime(&now)
+			curTask.Status = StatusPending
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
 				continue
-			} else {
-				if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
-					msg := fmt.Sprintf("RunTask: error: %s", err.Error())
-					glog.Error(msg)
-					continue
-				}
+			} else if curTask, err = svc.ActionCreateOrigin(curTask, cf); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
 			}
 
 		case ActionCreateIAMUser:
@@ -394,13 +503,11 @@ func (svc *AwsConfig) RunTasks() {
 			if curTask, err = svc.ActionCreateIAMUser(curTask, cf); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
-			} else {
-				if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
-					msg := fmt.Sprintf("RunTask: error: %s", err.Error())
-					glog.Error(msg)
-					continue
-				}
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
 			}
 
 		case ActionCreateAccessKey:
@@ -408,13 +515,12 @@ func (svc *AwsConfig) RunTasks() {
 			if curTask, err = svc.ActionCreateAccessKey(curTask, cf); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
+				curTask = curTaskFailed(curTask, err.Error())
 			}
 
 			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
 			}
 
 		case ActionCreateOriginAccessIdentity:
@@ -422,11 +528,11 @@ func (svc *AwsConfig) RunTasks() {
 			if curTask, err = svc.ActionCreateOriginAccessIdentity(curTask, cf); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
-			} else if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
 			}
 
 		case ActionCreateDistribution:
@@ -434,11 +540,11 @@ func (svc *AwsConfig) RunTasks() {
 			if curTask, err = svc.ActionCreateDistribution(curTask, cf); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
-			} else if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
 			}
 
 		case ActionAddBucketPolicy:
@@ -446,41 +552,72 @@ func (svc *AwsConfig) RunTasks() {
 			if curTask, err = svc.ActionAddBucketPolicy(curTask, cf); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
-				continue
-			} else if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
-				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
-				glog.Error(msg)
-				continue
+				curTask = curTaskFailed(curTask, err.Error())
 			}
-
-		case ActionDistributionDeployed:
-			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			if curTask, err = svc.ActionDistributionDeployed(curTask, cf); err != nil {
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
 				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
 				glog.Error(msg)
 			}
-			glog.Infof("RunTasks: ActionDistributionDeployed retries: %d", curTask.Retries)
-			curTask, err = svc.stg.UpdateTaskAction(curTask)
 
-		case ActionDeleteNew:
+		case ActionIsDistributionDeployed:
 			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			curTask = setTask(curTask, NextAction[curTask.Action], curTask.Status, nil, nil, false)
-			curTask, err = svc.stg.UpdateTaskAction(curTask)
+			if curTask, err = svc.ActionIsDistributionDeployed(curTask, cf); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				curTask = curTaskFailed(curTask, err.Error())
+			} else {
+				glog.Infof("RunTasks: ActionIsDistributionDeployed retries: %d", curTask.Retries)
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+			}
 
-		case ActionDeleteOrigin:
-			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			curTask = setTask(curTask, NextAction[curTask.Action], curTask.Status, nil, nil, false)
-			curTask, err = svc.stg.UpdateTaskAction(curTask)
-
-		case ActionDeleteIAMUser:
-			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			curTask = setTask(curTask, NextAction[curTask.Action], curTask.Status, nil, nil, false)
-			curTask, err = svc.stg.UpdateTaskAction(curTask)
+		// Deprovision actions
 
 		case ActionDisableDistribution:
 			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
-			curTask = setTask(curTask, NextAction[curTask.Action], curTask.Status, nil, nil, false)
-			curTask, err = svc.stg.UpdateTaskAction(curTask)
+			now := time.Now()
+			curTask.StartedAt = storage.SetNullTime(&now)
+			curTask.Status = StatusPending
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				continue
+			} else if curTask, err = svc.ActionDisableDistribution(curTask, cf); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				continue
+			}
+
+		case ActionDeleteOrigin:
+			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
+			if curTask, err = svc.ActionDeleteOrigin(curTask, cf); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+			}
+
+		case ActionDeleteIAMUser:
+			glog.Infof(">>>>> action: %s -> %s", curTask.Action, NextAction[curTask.Action])
+			if curTask, err = svc.ActionDeleteIAMUser(curTask, cf); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+				curTask = curTaskFailed(curTask, err.Error())
+			}
+			if curTask, err = svc.stg.UpdateTaskAction(curTask); err != nil {
+				msg := fmt.Sprintf("RunTask: error: %s", err.Error())
+				glog.Error(msg)
+			}
 
 		case ActionDeleteDistribution:
 			glog.Infof("action: %s -> %s", curTask.Action, NextAction[curTask.Action])

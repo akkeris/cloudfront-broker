@@ -37,22 +37,21 @@ func (p *PostgresStorage) AddTask(task *Task) (*Task, error) {
 	return task, nil
 }
 
-func (p *PostgresStorage) GetTaskByDistribution(distributionID string, operationKey string) (*Task, error) {
-	glog.Infof("===== GetTaskByDistribution [%s] =====", operationKey)
+func (p *PostgresStorage) GetTaskByDistribution(distributionID string) (*Task, error) {
+	glog.Infof("===== GetTaskByDistribution [%s] =====", distributionID)
 	task := Task{}
 
 	var selectTaskScript = `
   select task_id, distribution_id, operation_key, status, action, retries, metadata, result
+  from tasks
   where distribution_id = $1
-  and operation_key = $2
-  and delete_at is null
-  and finished_at is null
+  and deleted_at is null
 `
 	err := p.db.QueryRow(selectTaskScript, distributionID).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result)
 
 	if err != nil {
-		msg := fmt.Sprintf("GetTaskByDistribution [%s]: error selecting task: %s", err.Error())
-		glog.Info(msg)
+		msg := fmt.Sprintf("GetTaskByDistribution: error finding task: %s", err.Error())
+		glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -97,18 +96,24 @@ func (p *PostgresStorage) UpdateTaskAction(task *Task) (*Task, error) {
       result = $5,
       metadata = $6,
       finished_at = $7,
+      started_at = $8,
       updated_at = now()
     WHERE task_id = $1
     AND finished_at is null
     AND deleted_at is null
     RETURNING task_id, distribution_id, action, status, retries, result, metadata, created_at, updated_at, started_at, finished_at
-`, task.TaskID, task.Action, task.Status, task.Retries, task.Result, task.Metadata, task.FinishedAt).Scan(
+`, task.TaskID, task.Action, task.Status, task.Retries, task.Result, task.Metadata, task.FinishedAt, task.StartedAt).Scan(
 		&task.TaskID, &task.DistributionID, &task.Action, &task.Status, &task.Retries, &task.Result, &task.Metadata, &task.CreatedAt, &task.UpdatedAt, &task.StartedAt, &task.FinishedAt)
 
 	if err != nil {
 		msg := fmt.Sprintf("UpdateTaskAction: error updating task: %s", err.Error())
 		glog.Error(msg)
 		return nil, errors.New(msg)
+	}
+
+	if task == nil {
+		glog.Error("UpdateTaskAction: task is nil")
+		return nil, errors.New("UpdateTaskAction: task is nil")
 	}
 	return task, nil
 }

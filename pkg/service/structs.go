@@ -56,8 +56,3 @@ var (
 	OperationSucceeded  = string(osb.StateSucceeded)
 	OperationFailed     = string(osb.StateFailed)
 )
-
-type OperationState struct {
-	Status      *string
-	Description *string
-}

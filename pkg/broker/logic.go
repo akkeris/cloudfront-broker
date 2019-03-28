@@ -194,27 +194,24 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
+	distributionID := request.InstanceID
+
+	if deployed, err := b.service.IsDeployedInstance(distributionID); err != nil {
+		if err.Error() == "DistributionNotDeployed" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		}
+	}
+
 	operationKey := newOpKey("DPV")
 	respOpKey := osb.OperationKey(operationKey)
 	response.OperationKey = &respOpKey
 	response.Async = b.async
 
-	/*
-	   oldInstance := &storage.InstanceSpec{
-	     ID:           request.InstanceID,
-	     ServiceId:    request.ServiceID,
-	     PlanId:       request.PlanID,
-	     OperationKey: operationKey,
-	   }
+	err := b.service.DeleteCloudFrontDistribution(distributionID, operationKey)
+	if err != nil {
+		return nil, InternalServerErr()
+	}
 
-	   err := b.service.DeleteCloudFrontDistribution(callerReference, oldInstance)
-	   if err != nil {
-	     return nil, InternalServerErr()
-	   }
-
-	   delete(b.instances, request.InstanceID)
-
-	*/
 	return &response, nil
 }
 
@@ -222,8 +219,9 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 	b.Lock()
 	defer b.Unlock()
 
+	response := &broker.LastOperationResponse{}
+
 	glog.Infof("request: %+#v", request)
-	response := broker.LastOperationResponse{}
 
 	if request.InstanceID == "" {
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
@@ -231,18 +229,20 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 
 	glog.Infof("LastOperation: instance id: %s", request.InstanceID)
 
-	if request.ServiceID != nil {
-		glog.Infof("lastop: service id: %s", *request.ServiceID)
-	}
-	if request.PlanID != nil {
-		glog.Infof("lastop: plan id: %s", *request.PlanID)
-	}
-	if request.OperationKey == nil {
-		return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
-	}
+	/*
+	  if request.ServiceID != nil {
+	    glog.Infof("lastop: service id: %s", *request.ServiceID)
+	  }
+	  if request.PlanID != nil {
+	    glog.Infof("lastop: plan id: %s", *request.PlanID)
+	  }
+	  if request.OperationKey == nil {
+	    return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
+	  }
+	  operationKey := string(*request.OperationKey)
+	*/
 
 	distributionID := request.InstanceID
-	operationKey := string(*request.OperationKey)
 
 	found, err := b.service.IsDuplicateInstance(distributionID)
 
@@ -254,12 +254,17 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 		}
 	}
 
-	taskState, err := b.service.GetTaskState(distributionID, operationKey)
+	state, err := b.service.CheckLastOperation(distributionID)
 
-	response.State = osb.LastOperationState(*taskState.Status)
-	response.Description = taskState.Description
+	if err != nil {
+		return nil, InternalServerErr()
+	}
 
-	return &response, nil
+	response.State = state.State
+	response.Description = state.Description
+	response.LastOperationResponse = *state
+
+	return response, nil
 }
 
 func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext) (*broker.BindResponse, error) {

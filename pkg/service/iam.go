@@ -174,14 +174,12 @@ func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
-	var err error
-
-	glog.Info("==== deleteIAMUser ====")
+	glog.Infof("==== deleteIAMUser [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
 	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
-		msg := fmt.Sprintf("error getting iam session: %s", err.Error())
+		msg := "error getting iam session"
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -191,12 +189,11 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 		AccessKeyId: cf.s3Bucket.iAMUser.accessKey,
 	}
 
-	glog.Infof("deleteing access key for: %s\n", *delKeyInput.UserName)
-	glog.Infof("deleting access key: %s", *delKeyInput.AccessKeyId)
+	glog.Infof("deleteIAMUser [%s]: deleting access key: %s", *cf.operationKey, *delKeyInput.AccessKeyId)
 
-	_, err = svc.DeleteAccessKey(delKeyInput)
+	_, err := svc.DeleteAccessKey(delKeyInput)
 	if err != nil {
-		msg := fmt.Sprintf("error deleting access key: %s", err.Error())
+		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting access key: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -212,14 +209,14 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 
 	_, err = svc.DeleteUserPolicy(delUserPolicy)
 	if err != nil {
-		msg := fmt.Sprintf("error deleting user policy: %s", err.Error())
+		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting user policy: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
 
 	_, err = svc.DeleteUser(delUserInput)
 	if err != nil {
-		msg := fmt.Sprintf("error deleting iam user: %s", err.Error())
+		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting iam user: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}

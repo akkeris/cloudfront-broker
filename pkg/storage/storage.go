@@ -12,8 +12,10 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/golang/glog"
+	"github.com/lib/pq"
 
 	_ "github.com/lib/pq"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
@@ -58,6 +60,32 @@ func (p *PostgresStorage) NullString(s sql.NullString) *string {
 	}
 
 	return nil
+}
+
+func SetNullString(s string) sql.NullString {
+	ns := sql.NullString{}
+
+	switch {
+	case s == "":
+		ns.String = ""
+		ns.Valid = false
+	default:
+		ns.String = s
+		ns.Valid = true
+	}
+	return ns
+}
+
+func SetNullTime(t *time.Time) pq.NullTime {
+	nt := pq.NullTime{}
+	switch {
+	case t == nil:
+		nt.Valid = false
+	default:
+		nt.Time = *t
+		nt.Valid = true
+	}
+	return nt
 }
 
 func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, error) {
@@ -460,6 +488,37 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("GetOrigin: error finding origin: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	return origin, nil
+}
+
+// DeleteOrigin: update DeletedAt time
+// record delete will happen at another TBD time
+func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID string) (*Origin, error) {
+	origin := &Origin{}
+
+	updateOriginScript := `
+		update origin
+		set deleted_at = now()
+		where origin_id = $1
+		and distribtuion_id = $2
+		returning origin_id, distribution_id;
+`
+
+	err := p.db.QueryRow(updateOriginScript, originID, distributionID).Scan(
+		&origin.OriginID,
+		&origin.DistributionID,
+	)
+	switch {
+	case err == sql.ErrNoRows:
+		msg := fmt.Sprintf("UpdateDeleteOrigin: origin not found: %s", err.Error())
+		glog.Info(msg)
+		return nil, errors.New(OriginNotFound)
+	case err != nil:
+		msg := fmt.Sprintf("UpdateDeleteOrigin: error updating deleted at: %s", err.Error())
 		glog.Error(msg)
 		return nil, errors.New(msg)
 	}

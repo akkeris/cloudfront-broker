@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"cloudfront-broker/pkg/storage"
-
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
+
+	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
 const ttl int64 = 2592000
@@ -34,6 +34,22 @@ func (s *AwsConfig) IsDuplicateInstance(distributionID string) (bool, error) {
 	}
 
 	return true, err
+}
+
+func (s *AwsConfig) IsDeployedInstance(distributionID string) (bool, error) {
+	glog.Infof("===== IsDeployedInstance =====")
+
+	dist, err := s.stg.GetDistributionWithDeleted(distributionID)
+
+	if err != nil {
+		return false, err
+	}
+
+	if dist.Status == StatusDeployed {
+		return true, nil
+	}
+
+	return false, errors.New("DistributionNotDeployed")
 }
 
 func (s *AwsConfig) getCloudfrontInstance(distributionID string) (*cloudFrontInstance, error) {
@@ -214,17 +230,19 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 	return nil
 }
 
-func (s *AwsConfig) DeleteCloudFrontDistribution(callerReference string, cfInstance *storage.Distribution, operationKey string) error {
+func (s *AwsConfig) DeleteCloudFrontDistribution(distributionID string, operationKey string) error {
 
 	cf := &cloudFrontInstance{
-		callerReference: aws.String(callerReference),
-		distributionID:  aws.String(cfInstance.DistributionID),
-		operationKey:    aws.String(operationKey),
+		distributionID: aws.String(distributionID),
+		operationKey:   aws.String(operationKey),
 	}
 
-	glog.Infof("out: %+#v", cf)
-
-	go s.deleteDistributionController(cf)
+	err := s.ActionDeleteNew(cf)
+	if err != nil {
+		msg := fmt.Sprintf("DeleteCloudFrontDistribution: error creating new task: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
 
 	return nil
 }
@@ -438,6 +456,18 @@ func (s *AwsConfig) disableDistribution(cf *cloudFrontInstance) error {
 	return s.updateDistributionEnableFlag(cf, false)
 }
 
+func (s *AwsConfig) disableCloudfrontDistribution(cf *cloudFrontInstance) error {
+	glog.Info("==== disableCloudfrontDistribution [%s] ====", cf.operationKey)
+
+	if err := s.disableDistribution(cf); err != nil {
+		msg := fmt.Sprintf("disableCloudfrontDistribution: setting disable flag: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
 func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) error {
 	var err error
 
@@ -511,14 +541,15 @@ func (s *AwsConfig) deleteOriginAccessIdentity(cf *cloudFrontInstance) error {
 	return nil
 }
 
-func (s *AwsConfig) CheckLastOperation(in *storage.Distribution) (*OperationState, error) {
+func (s *AwsConfig) CheckLastOperation(distributionID string) (*osb.LastOperationResponse, error) {
+	glog.Infof("===== CheckLastOperation [%s] =====", distributionID)
 
-	sMsg := statusMsg(OperationInProgress, "task")
-
-	retStatus := &OperationState{
-		Status:      &OperationInProgress,
-		Description: &sMsg,
+	response, err := s.GetTaskState(distributionID)
+	if err != nil {
+		msg := fmt.Sprintf("CheckLastOperation: error getting task state: %s", err.Error())
+		glog.Error(msg)
+		return nil, errors.New(msg)
 	}
 
-	return retStatus, nil
+	return response, nil
 }

@@ -38,7 +38,7 @@ func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) error {
 
 	bucketName := s.genBucketName()
 
-	glog.Infof("createS3Bucket: bucket name: %s", bucketName)
+	glog.Infof("createS3Bucket: bucket name: %s", *bucketName)
 
 	s3in := &s3.CreateBucketInput{
 		Bucket: bucketName,
@@ -174,25 +174,21 @@ func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
 
 	err := input.Validate()
 	if err != nil {
-		glog.Errorf("error validating delete bucket input: %s\n", err)
+		glog.Errorf("deleteS3Bucket: error validating delete bucket input: %s\n", err)
 		return err
 	}
 
 	_, err = svc.DeleteBucket(input)
 
 	if err != nil {
-		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.bucketName, err)
+		glog.Errorf("deleteS3Bucket: error deleting bucket %s: %s\n", *cf.s3Bucket.bucketName, err)
 		return err
 	}
 
-	waitIn := &s3.HeadBucketInput{
-		Bucket: cf.s3Bucket.bucketName,
-	}
-
-	err = svc.WaitUntilBucketNotExists(waitIn)
+	_, err = s.stg.UpdateDeleteOrigin(*cf.distributionID, *cf.s3Bucket.originID)
 
 	if err != nil {
-		glog.Errorf("error deleting bucket %s: %s\n", *cf.s3Bucket.bucketName, err)
+		glog.Errorf("deleteS3Bucket: error updating deleted at: %s\n", *cf.s3Bucket.bucketName, err)
 		return err
 	}
 
