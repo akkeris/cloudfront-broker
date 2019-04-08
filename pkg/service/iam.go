@@ -98,7 +98,7 @@ func (s *AwsConfig) isIAMUserReady(userName string) (bool, error) {
 }
 
 func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
-	glog.Info("==== createAccessKey ====")
+	glog.Infof("==== createAccessKey [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
 	if svc == nil {
@@ -107,26 +107,15 @@ func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
 		return errors.New(msg)
 	}
 
-	accessKeyInput := &iam.CreateAccessKeyInput{
+	accessKeyOut, err := svc.CreateAccessKey(&iam.CreateAccessKeyInput{
 		UserName: cf.s3Bucket.iAMUser.userName,
-	}
-
-	accessKeyOut, err := svc.CreateAccessKey(accessKeyInput)
+	})
 
 	if err != nil {
 		msg := fmt.Sprintf("createAccessKey: error creating access key: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
-
-	glog.Infof("createAccessKey: access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
-	cf.s3Bucket.iAMUser.accessKey = accessKeyOut.AccessKey.AccessKeyId
-	cf.s3Bucket.iAMUser.secretKey = accessKeyOut.AccessKey.SecretAccessKey
-
-	err = s.stg.AddAccessKey(*cf.s3Bucket.originID, *cf.s3Bucket.iAMUser.accessKey, *cf.s3Bucket.iAMUser.secretKey)
-
-	var policyIn *iam.PutUserPolicyInput
-	// var policyOut *iam.PutUserPolicyOutput
 
 	userPolicy, _ := json.Marshal(map[string]interface{}{
 		"Version": "2012-10-17",
@@ -154,15 +143,19 @@ func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
 		},
 	})
 
-	cf.s3Bucket.iAMUser.policyName = aws.String(fmt.Sprintf("%s-policy", *cf.s3Bucket.bucketName))
+	policyName := aws.String(fmt.Sprintf("%s-policy", *cf.s3Bucket.bucketName))
 
-	policyIn = &iam.PutUserPolicyInput{
-		PolicyName:     cf.s3Bucket.iAMUser.policyName,
+	_, err = svc.PutUserPolicy(&iam.PutUserPolicyInput{
+		PolicyName:     policyName,
 		PolicyDocument: aws.String(string(userPolicy)),
 		UserName:       cf.s3Bucket.iAMUser.userName,
-	}
+	})
 
-	_, err = svc.PutUserPolicy(policyIn)
+	glog.Infof("createAccessKey: access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
+	cf.s3Bucket.iAMUser.accessKey = accessKeyOut.AccessKey.AccessKeyId
+	cf.s3Bucket.iAMUser.secretKey = accessKeyOut.AccessKey.SecretAccessKey
+
+	err = s.stg.AddAccessKey(*cf.s3Bucket.originID, *cf.s3Bucket.iAMUser.accessKey, *cf.s3Bucket.iAMUser.secretKey)
 
 	if err != nil {
 		msg := fmt.Sprintf("createAccessKey: error attaching policy: %s", err.Error())
@@ -177,44 +170,71 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 	glog.Infof("==== deleteIAMUser [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
-	glog.Infof("svc: %#+v\n", svc)
 	if svc == nil {
 		msg := "error getting iam session"
 		glog.Error(msg)
 		return errors.New(msg)
 	}
 
-	delKeyInput := &iam.DeleteAccessKeyInput{
-		UserName:    cf.s3Bucket.iAMUser.userName,
-		AccessKeyId: cf.s3Bucket.iAMUser.accessKey,
-	}
+	glog.Infof("deleteIAMUser [%s]: deleting iam user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
 
-	glog.Infof("deleteIAMUser [%s]: deleting access key: %s", *cf.operationKey, *delKeyInput.AccessKeyId)
-
-	_, err := svc.DeleteAccessKey(delKeyInput)
-	if err != nil {
-		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting access key: %s", *cf.operationKey, err.Error())
-		glog.Error(msg)
-		return errors.New(msg)
-	}
-
-	delUserInput := &iam.DeleteUserInput{
+	accessKeysOut, err := svc.ListAccessKeys(&iam.ListAccessKeysInput{
 		UserName: cf.s3Bucket.iAMUser.userName,
-	}
+	})
 
-	delUserPolicy := &iam.DeleteUserPolicyInput{
-		UserName:   cf.s3Bucket.iAMUser.userName,
-		PolicyName: cf.s3Bucket.iAMUser.policyName,
-	}
-
-	_, err = svc.DeleteUserPolicy(delUserPolicy)
 	if err != nil {
-		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting user policy: %s", *cf.operationKey, err.Error())
+		msg := fmt.Sprintf("deleteIAMUser [%s]: error listing access keys: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
 
-	_, err = svc.DeleteUser(delUserInput)
+	for i, accessKeyMeta := range accessKeysOut.AccessKeyMetadata {
+		glog.Infof("deleteIAMUser [%s]: deleting access key[%d]: %s", *cf.operationKey, i, *accessKeyMeta.AccessKeyId)
+
+		_, err := svc.DeleteAccessKey(&iam.DeleteAccessKeyInput{
+			UserName:    cf.s3Bucket.iAMUser.userName,
+			AccessKeyId: accessKeyMeta.AccessKeyId,
+		})
+
+		if err != nil {
+			msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting access key: %s", *cf.operationKey, err.Error())
+			glog.Error(msg)
+			return errors.New(msg)
+		}
+	}
+
+	userPolicyOut, err := svc.ListUserPolicies(&iam.ListUserPoliciesInput{
+		UserName: cf.s3Bucket.iAMUser.userName,
+	})
+
+	if err != nil {
+		msg := fmt.Sprintf("deleteIAMUser [%s]: error listing policies: %s", *cf.operationKey, err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	for i, policyName := range userPolicyOut.PolicyNames {
+
+		glog.Infof("deleteIAMUser [%s]: delete user policy{%d]: %s", *cf.operationKey, i, *policyName)
+
+		_, err = svc.DeleteUserPolicy(&iam.DeleteUserPolicyInput{
+			UserName:   cf.s3Bucket.iAMUser.userName,
+			PolicyName: policyName,
+		})
+
+		if err != nil {
+			msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting user policy: %s", *cf.operationKey, err.Error())
+			glog.Error(msg)
+			return errors.New(msg)
+		}
+	}
+
+	glog.Infof("deleteIAMUser [%s]: delete user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
+
+	_, err = svc.DeleteUser(&iam.DeleteUserInput{
+		UserName: cf.s3Bucket.iAMUser.userName,
+	})
+
 	if err != nil {
 		msg := fmt.Sprintf("deleteIAMUser [%s]: error deleting iam user: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)

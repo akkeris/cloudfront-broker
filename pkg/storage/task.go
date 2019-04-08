@@ -46,7 +46,9 @@ func (p *PostgresStorage) GetTaskByDistribution(distributionID string) (*Task, e
   from tasks
   where distribution_id = $1
   and deleted_at is null
+  order by created_at desc
 `
+
 	err := p.db.QueryRow(selectTaskScript, distributionID).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result)
 
 	if err != nil {

@@ -116,10 +116,12 @@ DO
         distribution_id uuid  NOT NULL PRIMARY KEY,
 
         plan_id         uuid REFERENCES plans ("plan_id") NOT NULL,
+        bind_id         uuid                              UNIQUE,
         cloudfront_id   varchar(200)                      UNIQUE,
         cloudfront_url  varchar(200),
         origin_access_identity varchar(200),
         caller_reference varchar(200)                     NOT NULL,
+        etag varchar(200),
         claimed         boolean                           NOT NULL DEFAULT FALSE,
         status          varchar(1024)                     NOT NULL DEFAULT 'new',
         billing_code    varchar(200),

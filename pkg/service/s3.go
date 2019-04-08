@@ -142,6 +142,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		},
 	})
 
+	glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
 	svc := s3.New(s.sess)
 	if svc == nil {
 		msg := "error getting s3 session"
@@ -172,9 +173,11 @@ func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
 		Bucket: cf.s3Bucket.bucketName,
 	}
 
+	// TODO delete objects first
+
 	err := input.Validate()
 	if err != nil {
-		glog.Errorf("deleteS3Bucket: error validating delete bucket input: %s\n", err)
+		glog.Errorf("deleteS3Bucket: error validating delete bucket input: %s", err)
 		return err
 	}
 

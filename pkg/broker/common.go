@@ -47,6 +47,14 @@ func NotFound() error {
 	}
 }
 
+func NotFoundWithMessage(errMsg string, description string) error {
+	return osb.HTTPStatusCodeError{
+		ResponseError: errors.New(errMsg),
+		StatusCode:    http.StatusNotFound,
+		Description:   &description,
+	}
+
+}
 func InternalServerErr() error {
 	description := "Internal Server Error"
 	return osb.HTTPStatusCodeError{

@@ -54,13 +54,11 @@ func TestCloudFrontService(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(in.s3Bucket.iAMUser, ShouldNotBeNil)
-				So(*in.s3Bucket.iAMUser.userName, ShouldNotBeBlank)
-				So(*in.s3Bucket.iAMUser.policyName, ShouldNotBeBlank)
+				So(*in.s3Bucket.iAMUser.userName, ShouldNotBeBlank)k)
 
 				Printf("iam user: %s\n", *in.s3Bucket.iAMUser.userName)
 				Printf("iam access key: %s\n", *in.s3Bucket.iAMUser.accessKey)
 				Printf("iam secret key: %s\n", *in.s3Bucket.iAMUser.secretKey)
-				Printf("policy name: %s\n", *in.s3Bucket.iAMUser.policyName)
 
 				Convey("create origin access idenity", func() {
 					go c.createOriginAccessIdentity(in)

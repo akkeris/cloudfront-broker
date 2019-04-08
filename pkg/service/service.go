@@ -32,6 +32,8 @@ func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64) (*Aws
 		stg:        stg,
 	}
 
+	c.waitSecs = waitSecs
+
 	region := os.Getenv("REGION")
 	if region == "" {
 		msg := "REGION environment variable not set"

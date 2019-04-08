@@ -69,6 +69,7 @@ type Origin struct {
 	AccessKey      sql.NullString
 	SecretKey      sql.NullString
 	BillingCode    sql.NullString
+	Etag           sql.NullString
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	DeletedAt      pq.NullTime

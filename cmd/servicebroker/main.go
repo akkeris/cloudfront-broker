@@ -113,6 +113,9 @@ func runWithContext(ctx context.Context) error {
 	}
 
 	s := server.New(api, reg)
+
+	businessLogic.AddRoutes(s.Router)
+
 	if options.AuthenticateK8SToken {
 		// get k8s client
 		k8sClient, err := getKubernetesClient(options.KubeConfig)

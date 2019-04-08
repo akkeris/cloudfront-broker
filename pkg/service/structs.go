@@ -32,7 +32,6 @@ type cloudFrontInstance struct {
 	originAccessIdentity *string
 	s3Bucket             *s3Bucket
 	operationKey         *string
-	distChan             chan error
 }
 
 type s3Bucket struct {
@@ -44,11 +43,17 @@ type s3Bucket struct {
 }
 
 type iAMUser struct {
-	userName   *string
-	arn        *string
-	accessKey  *string
-	secretKey  *string
-	policyName *string
+	userName  *string
+	arn       *string
+	accessKey *string
+	secretKey *string
+}
+
+type InstanceSpec struct {
+	CloudFrontUrl      string `json:"CLOUDFRONT_URL"`
+	BucketName         string `json:"CF_BUCKET_NAME"`
+	AwsAccessKey       string `json:"CF_AWS_ACCESS_KEY"`
+	AwsSecretAccessKey string `json:"CF_AWS_SECRET_ACCESS_KEY"`
 }
 
 var (

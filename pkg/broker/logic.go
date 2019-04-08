@@ -20,12 +20,10 @@ import (
 )
 
 type BusinessLogic struct {
-	async bool
 	sync.RWMutex
 
 	storage *storage.PostgresStorage
 	service *service.AwsConfig
-	port    string
 }
 
 var _ broker.Interface = &BusinessLogic{}
@@ -52,7 +50,6 @@ func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 	glog.Infof("namePrefix=%s", namePrefix)
 
 	bl := &BusinessLogic{
-		async:   o.Async,
 		storage: dbStore,
 		service: awsConfig,
 	}
@@ -83,6 +80,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 		}
 		waitSecs = s
 	}
+	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
 
 	stg, err := storage.InitStorage(ctx, o.DatabaseUrl)
 	return stg, namePrefix, waitSecs, err
@@ -141,6 +139,8 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 	respOpKey := osb.OperationKey(operationKey)
 	response.OperationKey = &respOpKey
 
+	response.Async = true
+
 	distributionID := request.InstanceID
 	serviceID := request.ServiceID
 	planID := request.PlanID
@@ -183,9 +183,6 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 
 	response := broker.DeprovisionResponse{}
 
-	// newUuid, _ := uuid.NewV4()
-	// callerReference := newUuid.String()
-
 	if !request.AcceptsIncomplete {
 		return nil, UnprocessableEntityWithMessage("AsyncRequired", "The query parameter accepts_incomplete=true MUST be included the request.")
 	}
@@ -196,18 +193,22 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 
 	distributionID := request.InstanceID
 
-	if deployed, err := b.service.IsDeployedInstance(distributionID); err != nil {
+	deployed, err := b.service.IsDeployedInstance(distributionID)
+	if err != nil {
 		if err.Error() == "DistributionNotDeployed" {
 			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
 		}
+	}
+	if !deployed {
+		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
 	}
 
 	operationKey := newOpKey("DPV")
 	respOpKey := osb.OperationKey(operationKey)
 	response.OperationKey = &respOpKey
-	response.Async = b.async
+	response.Async = true
 
-	err := b.service.DeleteCloudFrontDistribution(distributionID, operationKey)
+	err = b.service.DeleteCloudFrontDistribution(distributionID, operationKey)
 	if err != nil {
 		return nil, InternalServerErr()
 	}
@@ -221,8 +222,6 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 
 	response := &broker.LastOperationResponse{}
 
-	glog.Infof("request: %+#v", request)
-
 	if request.InstanceID == "" {
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
@@ -230,16 +229,16 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 	glog.Infof("LastOperation: instance id: %s", request.InstanceID)
 
 	/*
-	  if request.ServiceID != nil {
-	    glog.Infof("lastop: service id: %s", *request.ServiceID)
-	  }
-	  if request.PlanID != nil {
-	    glog.Infof("lastop: plan id: %s", *request.PlanID)
-	  }
-	  if request.OperationKey == nil {
-	    return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
-	  }
-	  operationKey := string(*request.OperationKey)
+	   if request.ServiceID != nil {
+	     glog.Infof("lastop: service id: %s", *request.ServiceID)
+	   }
+	   if request.PlanID != nil {
+	     glog.Infof("lastop: plan id: %s", *request.PlanID)
+	   }
+	   if request.OperationKey == nil {
+	     return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
+	   }
+	   operationKey := string(*request.OperationKey)
 	*/
 
 	distributionID := request.InstanceID
@@ -268,45 +267,18 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 }
 
 func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext) (*broker.BindResponse, error) {
-	// Your bind business logic goes here
-
-	// example implementation:
-	var response broker.BindResponse
-
-	/*
-	   b.Lock()
-	   defer b.Unlock()
-
-	   instance, ok := b.instances[request.InstanceID]
-	   if !ok {
-	     return nil, osb.HTTPStatusCodeError{
-	       StatusCode: http.StatusNotFound,
-	     }
-	   }
-
-	   response := broker.BindResponse{
-	     BindResponse: osb.BindResponse{
-	       Credentials: instance.Params,
-	     },
-	   }
-	   if request.AcceptsIncomplete {
-	     response.Async = b.async
-	   }
-	*/
-
-	return &response, nil
+	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
 }
 
 func (b *BusinessLogic) Unbind(request *osb.UnbindRequest, c *broker.RequestContext) (*broker.UnbindResponse, error) {
-	// Your unbind business logic goes here
-	return &broker.UnbindResponse{}, nil
+	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
 }
 
 func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.RequestContext) (*broker.UpdateInstanceResponse, error) {
 	// Your logic for updating a service goes here.
 	response := broker.UpdateInstanceResponse{}
 	if request.AcceptsIncomplete {
-		response.Async = b.async
+		response.Async = request.AcceptsIncomplete
 	}
 
 	return &response, nil
@@ -318,4 +290,29 @@ func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
 
 func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) {
 	b.service.RunTasks()
+}
+
+func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
+
+	if instanceID == "" {
+		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
+	}
+
+	deployed, err := b.service.IsDeployedInstance(instanceID)
+	if err != nil {
+		if err.Error() == "DistributionNotDeployed" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		}
+	}
+	if !deployed {
+		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
+	}
+
+	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(instanceID)
+
+	if err != nil {
+		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
+	}
+
+	return cloudFrontInstance, nil
 }

@@ -224,7 +224,7 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 			Name:                serviceName,
 			ID:                  serviceID,
 			Description:         nullStringValue(serviceDescription),
-			Bindable:            true,
+			Bindable:            false,
 			BindingsRetrievable: true,
 			PlanUpdatable:       &planUpdateable,
 			Tags:                strings.Split(nullStringValue(serviceCatagories), ","),
@@ -358,18 +358,27 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 	return nil
 }
 
-func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status string) error {
-	var err error
+func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status string, delete bool) error {
 	d := &Distribution{}
+
+	var deletedAt pq.NullTime
+
+	if delete {
+		n := time.Now()
+		deletedAt = SetNullTime(&n)
+	} else {
+		deletedAt = SetNullTime(nil)
+	}
 
 	updateDistributionScript := `
     update distributions
-    set status = $2
+    set status = $2,
+        deleted_at = $3
     where distribution_id = $1
     returning distribution_id, status
   `
 
-	err = p.db.QueryRow(updateDistributionScript, &distributionID, &status).Scan(&d.DistributionID, &d.Status)
+	err := p.db.QueryRow(updateDistributionScript, &distributionID, &status, &deletedAt).Scan(&d.DistributionID, &d.Status)
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("UpdateDistributionStatus: distribution not found: %s", err.Error())
@@ -377,6 +386,27 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 		return errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("UpdateDistributionStatus: error updating distribution: %s", err.Error())
+		glog.Error(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (p *PostgresStorage) UpdateDistributionDeletedAt(distributionID string) error {
+	var distDeleted string
+
+	updateDistributionDeleted := `
+    update distributions
+    set deleted_at = now()
+    where distribution_id = $1
+    returning distribution_id
+  `
+
+	err := p.db.QueryRow(updateDistributionDeleted, &distributionID).Scan(&distDeleted)
+
+	if err != nil {
+		msg := fmt.Sprintf("DeleteDistribution: error setting deleted_at: %s", err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -501,10 +531,10 @@ func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID str
 	origin := &Origin{}
 
 	updateOriginScript := `
-		update origin
+		update origins
 		set deleted_at = now()
 		where origin_id = $1
-		and distribtuion_id = $2
+		and distribution_id = $2
 		returning origin_id, distribution_id;
 `
 
