@@ -39,7 +39,7 @@ var options struct {
 
 func init() {
 	fmt.Println(">>>>> init <<<<<")
-	flag.IntVar(&options.Port, "port", 5000, "use '--port' option to specify the port for broker to listen on")
+	flag.IntVar(&options.Port, "port", 5443, "use '--port' option to specify the port for broker to listen on")
 	flag.BoolVar(&options.Insecure, "insecure", false, "use --insecure to use HTTP vs HTTPS.")
 	flag.StringVar(&options.TLSCertFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert).")
 	flag.StringVar(&options.TLSKeyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
@@ -141,6 +141,7 @@ func runWithContext(ctx context.Context) error {
 	glog.Infof("Starting broker!")
 
 	if options.Insecure {
+		glog.V(4).Infof("Starting insecure broker")
 		err = s.Run(ctx, addr)
 	} else {
 		if options.TLSCert != "" && options.TLSKey != "" {

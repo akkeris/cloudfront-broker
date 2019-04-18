@@ -142,7 +142,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		},
 	})
 
-	glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
+	// glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
 	svc := s3.New(s.sess)
 	if svc == nil {
 		msg := "error getting s3 session"
@@ -161,6 +161,28 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		return errors.New(msg)
 	}
 
+	corsRule := s3.CORSRule{
+		AllowedHeaders: aws.StringSlice([]string{"Authorization"}),
+		AllowedOrigins: aws.StringSlice([]string{"*"}),
+		AllowedMethods: aws.StringSlice([]string{"GET", "HEAD"}),
+		MaxAgeSeconds:  aws.Int64(3600),
+	}
+
+	corsIn := &s3.PutBucketCorsInput{
+		Bucket: cf.s3Bucket.bucketName,
+		CORSConfiguration: &s3.CORSConfiguration{
+			CORSRules: []*s3.CORSRule{&corsRule},
+		},
+	}
+
+	_, err = svc.PutBucketCors(corsIn)
+
+	if err != nil {
+		msg := fmt.Sprintf("error adding CORS Policy to %s: %s", *cf.s3Bucket.bucketName, err.Error())
+		glog.Errorf(msg)
+		return errors.New(msg)
+	}
+
 	return nil
 }
 
@@ -172,8 +194,6 @@ func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
 	input := &s3.DeleteBucketInput{
 		Bucket: cf.s3Bucket.bucketName,
 	}
-
-	// TODO delete objects first
 
 	err := input.Validate()
 	if err != nil {
