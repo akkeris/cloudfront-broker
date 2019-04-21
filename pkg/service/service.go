@@ -24,10 +24,11 @@ import (
 	"github.com/golang/glog"
 )
 
-func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64) (*AwsConfig, error) {
+func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64, maxRetries int64) (*AwsConfig, error) {
 	c := AwsConfig{
 		namePrefix: namePrefix,
 		waitSecs:   waitSecs,
+		maxRetries: maxRetries,
 		conf:       &aws.Config{},
 		stg:        stg,
 	}

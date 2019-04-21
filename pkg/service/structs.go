@@ -17,6 +17,7 @@ type AwsConfig struct {
 	conf       *aws.Config
 	sess       *session.Session
 	waitSecs   int64
+	maxRetries int64
 	stg        *storage.PostgresStorage
 }
 

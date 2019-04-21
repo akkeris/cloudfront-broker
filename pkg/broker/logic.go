@@ -34,14 +34,14 @@ func newOpKey(prefix string) string {
 }
 
 func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
-	dbStore, namePrefix, waitSecs, err := InitFromOptions(ctx, o)
+	dbStore, namePrefix, waitSecs, maxRetries, err := InitFromOptions(ctx, o)
 
 	if err != nil {
 		glog.Errorf("error initializing: %s", err.Error())
 		return nil, errors.New("error initializing" + ": " + err.Error())
 	}
 
-	awsConfig, err := service.Init(dbStore, namePrefix, waitSecs)
+	awsConfig, err := service.Init(dbStore, namePrefix, waitSecs, maxRetries)
 	if err != nil {
 		msg := fmt.Sprintf("error initializing the service: %s\n", err)
 		glog.Fatalln(msg)
@@ -57,11 +57,12 @@ func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 	return bl, nil
 }
 
-func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, string, int64, error) {
+func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, string, int64, int64, error) {
 
 	var err error
 	namePrefix := o.NamePrefix
 	waitSecs := o.WaitSecs
+	maxRetries := o.MaxRetries
 
 	glog.Infof("options: %#+v", o)
 
@@ -70,20 +71,29 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	}
 
 	if namePrefix == "" {
-		return nil, "", 0, errors.New("the name prefix was not specified, set NAME_PREFIX in your environment or provide it via the cli using -name-prefix")
+		return nil, "", 0, 0, errors.New("the name prefix was not specified, set NAME_PREFIX in environment or provide it via the cli using -name-prefix")
 	}
 
 	if os.Getenv("WAIT_SECONDS") != "" {
 		s, err := strconv.ParseInt(os.Getenv("WAIT_SECONDS"), 10, 64)
 		if err != nil {
-			return nil, "", 0, errors.New("Invalid value for WAIT_SECONDS")
+			return nil, "", 0, 0, errors.New("invalid value for WAIT_SECONDS, set WAIT_SECONDS in environment or provide via the cli using -wait-seconds")
 		}
 		waitSecs = s
 	}
 	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
 
+	if os.Getenv("MAX_RETRIES") != "" {
+		s, err := strconv.ParseInt(os.Getenv("MAX_RETRIES"), 10, 64)
+		if err != nil {
+			return nil, "", 0, 0, errors.New("invalid value for MAX_RETRIES, set MAX_RETRIES in environment or provide via the cli using -max-retries")
+		}
+		maxRetries = s
+	}
+	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
+
 	stg, err := storage.InitStorage(ctx, o.DatabaseUrl)
-	return stg, namePrefix, waitSecs, err
+	return stg, namePrefix, waitSecs, maxRetries, err
 }
 
 func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {

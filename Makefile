@@ -7,13 +7,13 @@ IMAGE ?= quay.octanner.io/cloudops/$(NAME)
 TAG ?= $(shell git describe --tags --always)
 PULL ?= IfNotPresent
 
-SRC=servicebroker/*.go pkg/*/*.go
-PKG=$(NAME)/servicebroker $(NAME)/pkg/broker $(NAME)/pkg/storage $(NAME)/pkg/service
+SRC=*.go pkg/*/*.go
+PKG=$(NAME)/pkg/broker $(NAME)/pkg/storage $(NAME)/pkg/service
 
 build: $(NAME) ## Builds the cloudfront-broker
 
 $(NAME): $(SRC) ## Builds the cloudfront-broker
-	go build -i  -o $(NAME) cloudfront-broker/servicebroker
+	go build -i  -o $(NAME) .
 
 test: ## Runs the tests
 	go test $(PKG)
@@ -34,6 +34,7 @@ clean: ## Cleans up build artifacts
 	rm -f $(NAME)
 	rm -f $(NAME)-linux
 	rm -f image/$(NAME)
+	go clean --cache
 
 
 push: image ## Pushes the image
@@ -44,6 +45,16 @@ deploy-helm: image ## Deploys image with helm
 	helm upgrade --install broker-skeleton --namespace broker-skeleton \
 	charts/$(NAME) \
 	--set image="$(IMAGE):$(TAG)",imagePullPolicy="$(PULL)"
+
+lint: $(SRC)
+	golint pkg/...
+
+vet: $(SRC)
+	go vet $(NAME)/pkg/...
+
+tidy: $(SRC)
+	go mod tidy
+	go mod verify
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
