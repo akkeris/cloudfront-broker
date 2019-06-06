@@ -47,19 +47,27 @@ func cancelOnInterrupt(ctx context.Context, db *sql.DB) {
 }
 
 func nullStringValue(ns sql.NullString) string {
+	var blank string
+
 	if ns.Valid {
 		return ns.String
 	}
 
-	return ""
+	return blank
 }
 
-func (p *PostgresStorage) NullString(s sql.NullString) *string {
-	if s.Valid {
-		return &s.String
-	}
+func (p *PostgresStorage) NullString(ns sql.NullString) *string {
+	var r string
+	/*
+		if s.Valid {
+			return &s.String
+		}
 
-	return nil
+		return nil
+	*/
+
+	r = nullStringValue(ns)
+	return &r
 }
 
 func SetNullString(s string) sql.NullString {
@@ -393,7 +401,7 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 	return nil
 }
 
-func (p *PostgresStorage) UpdateDistributionDeletedAt(distributionID string) error {
+func (p *PostgresStorage) UpdateDeleteDistribution(distributionID string) error {
 	var distDeleted string
 
 	updateDistributionDeleted := `
@@ -451,22 +459,22 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 	return d, nil
 }
 
-func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, originURL string, originPath string, billingCode string) (*Origin, error) {
+func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bucketURL string, originPath string, billingCode string) (*Origin, error) {
 	glog.Info("===== AddOrigin =====")
 
 	origin := &Origin{
 		DistributionID: distributionID,
 		BucketName:     bucketName,
-		BucketUrl:      originURL,
-		OriginPath:     "/",
+		BucketUrl:      bucketURL,
+		OriginPath:     originPath,
 		BillingCode:    sql.NullString{String: billingCode, Valid: true},
 	}
 
 	err := p.db.QueryRow(`insert into origins
-    (origin_id, distribution_id, bucket_name, bucket_url)
+    (origin_id, distribution_id, bucket_name, bucket_url, billing_code)
     values 
-    (uuid_generate_v4(), $1, $2, $3) returning origin_id;`,
-		distributionID, bucketName, originURL).Scan(&origin.OriginID)
+    (uuid_generate_v4(), $1, $2, $3, $4) returning origin_id;`,
+		distributionID, bucketName, bucketURL, origin.BillingCode).Scan(&origin.OriginID)
 
 	if err != nil {
 		msg := fmt.Sprintf("AddOrigin: error inserting origin: %s", err.Error())
@@ -525,8 +533,6 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 	return origin, nil
 }
 
-// DeleteOrigin: update DeletedAt time
-// record delete will happen at another TBD time
 func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID string) (*Origin, error) {
 	origin := &Origin{}
 
@@ -661,4 +667,28 @@ func (p *PostgresStorage) AddOriginAccessIdentity(distributionID string, originA
 	}
 
 	return distribution, nil
+}
+
+func (p *PostgresStorage) deleteItDistribution(distributionID string) error {
+	delScript := "delete from distributions where distribution_id = $1"
+
+	_, err := p.db.Exec(delScript, distributionID)
+
+	return err
+}
+
+func (p *PostgresStorage) deleteItOrigin(originID string) error {
+	delScript := "delete from origins where origin_id = $1"
+
+	_, err := p.db.Exec(delScript, originID)
+
+	return err
+}
+
+func (p *PostgresStorage) deleteItTask(taskID string) error {
+	delScript := "delete from tasks where task_id = $1"
+
+	_, err := p.db.Exec(delScript, taskID)
+
+	return err
 }

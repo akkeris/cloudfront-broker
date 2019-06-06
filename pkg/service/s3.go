@@ -211,7 +211,7 @@ func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
 	_, err = s.stg.UpdateDeleteOrigin(*cf.distributionID, *cf.s3Bucket.originID)
 
 	if err != nil {
-		glog.Errorf("deleteS3Bucket: error updating deleted at: %s\n", *cf.s3Bucket.bucketName, err)
+		glog.Errorf("deleteS3Bucket: error updating deleted at: %s\n", err)
 		return err
 	}
 

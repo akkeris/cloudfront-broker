@@ -143,7 +143,7 @@ func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 	err := svc.stg.NewDistribution(*cf.distributionID, *cf.planID, *cf.billingCode, *cf.callerReference, statusPending)
 
 	if err != nil {
-		msg := fmt.Sprintf("actionCreateNew[%s]: error adding new distribution: %s", cf.operationKey, err.Error())
+		msg := fmt.Sprintf("actionCreateNew[%s]: error adding new distribution: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return errors.New(msg)
 	}
@@ -403,7 +403,7 @@ func (svc *AwsConfig) actionDisableDistribution(curTask *storage.Task, cf *cloud
 	_, err := svc.getCloudfrontDistribution(cf)
 
 	if err != nil {
-		msg := fmt.Sprintf("actionDisableDistribution [%s]: getting distribution from aws: %s", cf.operationKey, err.Error())
+		msg := fmt.Sprintf("actionDisableDistribution [%s]: getting distribution from aws: %s", *cf.operationKey, err.Error())
 		curTask = curTaskFailed(curTask, "cloudfront distribution error")
 		glog.Error(msg)
 		return curTask, errors.New(msg)
@@ -411,7 +411,7 @@ func (svc *AwsConfig) actionDisableDistribution(curTask *storage.Task, cf *cloud
 
 	err = svc.disableCloudfrontDistribution(cf)
 	if err != nil {
-		msg := fmt.Sprintf("actionDisableDistribution [%s]: getting disabling distribution: %s", cf.operationKey, err.Error())
+		msg := fmt.Sprintf("actionDisableDistribution [%s]: getting disabling distribution: %s", *cf.operationKey, err.Error())
 		curTask = curTaskFailed(curTask, "error disabling distribution")
 		glog.Error(msg)
 		return nil, errors.New(msg)
@@ -475,7 +475,7 @@ func (svc *AwsConfig) actionDeleteDistribution(curTask *storage.Task, cf *cloudF
 
 	err := svc.deleteDistribution(cf)
 	if err != nil {
-		msg := fmt.Sprintf("actionDeleteDistribution [%s]: deleting distribution: %s", cf.operationKey, err.Error())
+		msg := fmt.Sprintf("actionDeleteDistribution [%s]: deleting distribution: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return curTask, errors.New(msg)
 	}
@@ -489,7 +489,7 @@ func (svc *AwsConfig) actionDeleteOriginAccessIdentity(curTask *storage.Task, cf
 
 	err := svc.deleteOriginAccessIdentity(cf)
 	if err != nil {
-		msg := fmt.Sprintf("actionDeleteOriginAccessIdentity [%s]: deleting origin access identity: %s", cf.operationKey, err.Error())
+		msg := fmt.Sprintf("actionDeleteOriginAccessIdentity [%s]: deleting origin access identity: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
 		return curTask, errors.New(msg)
 	}
@@ -570,7 +570,7 @@ func (svc *AwsConfig) RunTasks() {
 				curTask = curTaskFailed(curTask, err.Error())
 			}
 		} else {
-			msg := fmt.Sprintf("RunTasks[%s]: action %s not found", cf.operationKey, curTask.Action)
+			msg := fmt.Sprintf("RunTasks[%s]: action %s not found", *cf.operationKey, curTask.Action)
 			glog.Error(msg)
 			curTask = curTaskFailed(curTask, msg)
 		}

@@ -14,7 +14,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"cloudfront-broker/pkg/storage"
@@ -64,20 +63,4 @@ func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64, maxRe
 
 	c.sess = session.Must(session.NewSession(c.conf))
 	return &c, nil
-}
-
-func statusMsg(status string, process string) string {
-	var msg string
-	switch status {
-	case OperationInProgress:
-		msg = fmt.Sprintf("%s is in progess", process)
-	case OperationSucceeded:
-		msg = fmt.Sprintf("%s has completed successfully", process)
-	case OperationFailed:
-		msg = fmt.Sprintf("%s has failed", process)
-	default:
-		msg = fmt.Sprintf("%s status unknown", process)
-	}
-
-	return msg
 }

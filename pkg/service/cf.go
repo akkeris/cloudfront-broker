@@ -379,10 +379,10 @@ func (s *AwsConfig) deleteDistribution(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) updateDistributionDeletedAt(cf *cloudFrontInstance) error {
-	err := s.stg.UpdateDistributionDeletedAt(*cf.distributionID)
+	err := s.stg.UpdateDeleteDistribution(*cf.distributionID)
 
 	if err != nil {
-		msg := fmt.Sprintf("updateDistributionDeletedAt: error from UpdateDistributionDeletedAt: %s", err.Error())
+		msg := fmt.Sprintf("updateDistributionDeletedAt: error from UpdateDeleteDistribution: %s", err.Error())
 		glog.Error(msg)
 		return err
 	}
