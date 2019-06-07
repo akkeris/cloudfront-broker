@@ -295,6 +295,7 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 }
 
 func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
+	// TODO valid OSB api version 2.13+
 	return nil
 }
 

@@ -49,14 +49,15 @@ func TestStorage(t *testing.T) {
 	bucketName := "cfdev-a1b2c3d4"
 	operationKey := "PRV123456789"
 	callerReference := "fe06e76e-9823-4e59-9feb-4a95d4f6eddc"
-	status := "pending"
+	status := "new"
 	bucketURL := fmt.Sprintf("https://%s.s3.aws.io", bucketName)
 	originPath := "/"
-	// iAMUser := "AD23F3443FGW34"
-	// accessKey := "ALKASJF234234H5H32K234"
-	// secretKey := "ajdskf2sksdahffds2jhkjhk56hk"
-	// originAccessIdentity := "EASDF23SLKJSFKJ24JLK"
-	// cloudfrontId := "EA1B2C3D4E5"
+	cloudfrontID := "EA1B2C3D4E5"
+	cloudfrontURL := "https://d123456abcd.cloudfront.net"
+	iamUser := "AD23F3443FGW34"
+	accessKey := "ALKASJF234234H5H32K234"
+	secretKey := "ajdskf2sksdahffds2jhkjhk56hk"
+	originAccessIdentity := "EASDF23SLKJSFKJ24JLK"
 
 	stg, err := InitStorage(context.TODO(), "")
 	if err != nil {
@@ -107,16 +108,116 @@ func TestStorage(t *testing.T) {
 			So(services[0].Plans, ShouldNotBeEmpty)
 			So(services[0].Plans[0].ID, ShouldEqual, planID)
 		})
+	})
 
+	Convey("distributions", t, func() {
 		Convey("new distribution", func() {
 			err := stg.NewDistribution(distributionID, planID, billingCode, callerReference, status)
 			So(err, ShouldBeNil)
 
-			Convey("insert new task", func() {
+			Convey("get distribution", func() {
+				_, err = stg.GetDistribution(distributionID)
 
+				So(err, ShouldBeNil)
+				Convey("update distribution status", func() {
+					var pendingStatus = "pending"
+					err = stg.UpdateDistributionStatus(distributionID, pendingStatus, false)
+
+					So(err, ShouldBeNil)
+
+					Convey("update with cloudfront", func() {
+						dist, err := stg.UpdateDistributionCloudfront(distributionID, cloudfrontID, cloudfrontURL)
+
+						So(err, ShouldBeNil)
+						So(dist, ShouldNotBeNil)
+						So(dist.CloudfrontID.String, ShouldEqual, cloudfrontID)
+						So(dist.CloudfrontUrl.String, ShouldEqual, cloudfrontURL)
+
+						Convey("update with origin access identity", func() {
+							err := stg.UpdateDistributionWIthOriginAccessIdentity(distributionID, originAccessIdentity)
+
+							So(err, ShouldBeNil)
+						})
+					})
+				})
+			})
+		})
+	})
+
+	Convey("origins", t, func() {
+		Convey("insert new origin", func() {
+			origin, err := stg.AddOrigin(distributionID, bucketName, bucketURL, originPath, billingCode)
+
+			So(err, ShouldBeNil)
+			So(origin.OriginID, ShouldNotBeBlank)
+			So(origin.DistributionID, ShouldEqual, distributionID)
+
+			originID = origin.OriginID
+
+			Convey("get origin from distribution", func() {
+				origin, err := stg.GetOriginByDistributionID(distributionID)
+
+				So(err, ShouldBeNil)
+				So(origin, ShouldNotBeNil)
+				So(origin.OriginID, ShouldEqual, originID)
+
+				Convey("get origin by id", func() {
+					origin, err := stg.GetOriginByID(originID)
+
+					So(err, ShouldBeNil)
+					So(origin, ShouldNotBeNil)
+					So(origin.DistributionID, ShouldEqual, distributionID)
+
+					Convey("add iam user", func() {
+						err := stg.AddIAMUser(originID, iamUser)
+
+						So(err, ShouldBeNil)
+
+						Convey("add access key", func() {
+							err := stg.AddAccessKey(originID, accessKey, secretKey)
+
+							So(err, ShouldBeNil)
+						})
+					})
+				})
+			})
+		})
+	})
+
+	Convey("tasks", t, func() {
+		Convey("insert new task", func() {
+			task := &Task{
+				DistributionID: distributionID,
+				Action:         "create-new",
+				Status:         "new",
+				Retries:        0,
+				OperationKey:   sql.NullString{String: operationKey, Valid: true},
+				Result:         sql.NullString{String: "in progress", Valid: true},
+				Metadata:       sql.NullString{String: "", Valid: false},
+				StartedAt:      pq.NullTime{Time: time.Now(), Valid: true},
+			}
+			task, err = stg.AddTask(task)
+
+			So(err, ShouldBeNil)
+			So(task.TaskID, ShouldNotBeBlank)
+
+			taskID = task.TaskID
+
+			// Printf("\ntask id: %s\n", task.TaskID)
+
+			Convey("pop next task", func() {
+				popTask, err := stg.PopNextTask()
+
+				So(err, ShouldBeNil)
+				So(popTask.TaskID, ShouldEqual, taskID)
+			})
+
+			Convey("update task action", func() {
+				var newAction string = "is-distribution-deployed"
 				task := &Task{
+					TaskID:         taskID,
 					DistributionID: distributionID,
-					Action:         "create-new",
+					Action:         newAction,
 					Status:         "pending",
 					Retries:        0,
 					OperationKey:   sql.NullString{String: operationKey, Valid: true},
@@ -125,45 +226,41 @@ func TestStorage(t *testing.T) {
 					StartedAt:      pq.NullTime{Time: time.Now(), Valid: true},
 				}
 
-				task, err = stg.AddTask(task)
+				updatedTask, err := stg.UpdateTaskAction(task)
 
 				So(err, ShouldBeNil)
-				So(task.TaskID, ShouldNotBeBlank)
+				So(updatedTask.TaskID, ShouldEqual, taskID)
+				So(updatedTask.Action, ShouldEqual, newAction)
+			})
 
-				taskID = task.TaskID
+			Convey("get task by distribution", func() {
+				task, err := stg.GetTaskByDistribution(distributionID)
 
-				Printf("\ntask id: %s\n", task.TaskID)
-
-				Convey("insert new origin", func() {
-					origin, err := stg.AddOrigin(distributionID, bucketName, bucketURL, originPath, billingCode)
-
-					So(err, ShouldBeNil)
-					So(origin.OriginID, ShouldNotBeBlank)
-					So(origin.DistributionID, ShouldEqual, distributionID)
-
-					originID = origin.OriginID
-					Printf("\norigin id: %s\n", originID)
-				})
+				So(err, ShouldBeNil)
+				So(task.TaskID, ShouldEqual, taskID)
+			})
+			Reset(func() {
+				err = stg.deleteItTask(taskID)
 			})
 		})
+	})
 
-		/*
-			Reset(func() {
-				err = stg.UpdateDeleteDistribution(distributionID)
+	Convey("'delete' distribution", t, func() {
+		Convey("update distribution as deleted", func() {
+			err := stg.UpdateDeleteDistribution(distributionID)
 
-				if err != nil {
-					Print("error 'deleting' distribution")
-				}
-				_, err := stg.UpdateDeleteOrigin(distributionID, originID)
+			So(err, ShouldBeNil)
 
-				if err != nil {
-					Print("error 'deleting' origin")
-				}
+			Convey("get deleted distribution", func() {
+				dist, err := stg.GetDistributionWithDeleted(distributionID)
+
+				So(err, ShouldBeNil)
+				So(dist.DistributionID, ShouldEqual, distributionID)
+				So(dist.DeletedAt.Valid, ShouldBeTrue)
 			})
-		*/
+		})
 	})
 
 	err = stg.deleteItOrigin(originID)
-	err = stg.deleteItTask(taskID)
 	err = stg.deleteItDistribution(distributionID)
 }

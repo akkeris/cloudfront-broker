@@ -198,22 +198,153 @@ DO
 `
 
 const initServicesScript string = `
-INSERT INTO services (service_id, name, human_name, description, categories, beta, depreciated)
-VALUES ('3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
-'distribution',
-'Akkeris Cloudfront',
-'Create a Cloudfront Distribution',
-'Cloudfront Distribution, CDN',
-FALSE,
-FALSE);
+  INSERT INTO services (service_id, name, human_name, description, categories, beta, depreciated)
+  VALUES ('3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
+    'distribution',
+    'Akkeris Cloudfront',
+    'Create a Cloudfront Distribution',
+    'Cloudfront Distribution, CDN',
+    FALSE,
+    FALSE);
 `
 
 const initPlansScript string = `
-INSERT INTO plans (plan_id, service_id, name, human_name, description, categories)
-VALUES ('5eac120c-5303-4f55-8a62-46cde1b52d0b',
-'3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
-'dist',
-'Cloudfront Distribution',
-'Create/Update a Cloudfront Distribution',
-'cloudfront, cdn');
+  INSERT INTO plans (plan_id, service_id, name, human_name, description, categories)
+  VALUES ('5eac120c-5303-4f55-8a62-46cde1b52d0b',
+    '3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
+    'dist',
+    'Cloudfront Distribution',
+    'Create/Update a Cloudfront Distribution',
+    'cloudfront, cdn');
+`
+
+const checkPlanScript string = `
+  select count(*) from plans
+  where plan_id = $1
+  and deleted_at is null
+`
+
+const selectDistScript string = `
+  select 
+    distribution_id, 
+    plan_id, 
+    cloudfront_id, 
+    cloudfront_url, 
+    origin_access_identity, 
+    claimed, 
+    status, 
+    billing_code, 
+    caller_reference,
+    created_at,
+    updated_at,
+    deleted_at
+  from distributions
+  where distribution_id = $1
+`
+
+const updateDistributionScript string = `
+  update distributions
+  set status = $2,
+    deleted_at = $3
+  where distribution_id = $1
+  returning distribution_id, status
+`
+
+const updateDistributionWithCloudfrontScript string = `
+  update distributions
+  set cloudfront_id = $2,
+    cloudfront_url = $3
+  where distribution_id = $1
+  returning plan_id, cloudfront_id, cloudfront_url, origin_access_identity, claimed, status, billing_code
+`
+
+const updateDistributionDeleted string = `
+  update distributions
+  set deleted_at = now()
+  where distribution_id = $1
+  returning distribution_id
+`
+
+const updateDistWithOAIScript string = `
+  update distributions
+    set origin_access_identity = $2
+  where distribution_id = $1
+`
+
+const insertOriginScript string = `
+insert into origins
+  (origin_id, distribution_id, bucket_name, bucket_url, billing_code)
+values 
+  (uuid_generate_v4(), $1, $2, $3, $4) returning origin_id;
+`
+
+const selectOriginScript string = `
+  select origin_id, distribution_id, bucket_name, bucket_url, origin_path, iam_user, access_key, secret_key
+  from origins 
+`
+
+const updateOriginScript string = `
+  update origins
+  set deleted_at = now()
+  where origin_id = $1
+  and distribution_id = $2
+  returning origin_id, distribution_id;
+`
+
+const updateOriginWithIAMScript string = `
+  update origins
+    set iam_user = $2
+    where origin_id = $1
+`
+
+const updateOriginWithAccessKeyScript string = `
+  update origins
+    set access_key = $2,
+        secret_key = $3
+    where origin_id = $1
+`
+
+const insertTaskScript string = `
+  insert into tasks
+  (task_id, distribution_id, status, action, operation_key, retries, started_at)
+  values 
+  (uuid_generate_v4(), $1, $2, $3, $4, $5, $6) returning task_id
+`
+
+const selectTaskScript string = `
+  select task_id, distribution_id, operation_key, status, action, retries, metadata, result
+  from tasks
+  where distribution_id = $1
+  and deleted_at is null
+  order by created_at desc
+`
+
+const popNextTaskScript string = `
+  update tasks set
+    status = $1,
+    updated_at = now() 
+  where task_id in ( 
+    select task_id
+    from tasks 
+    where status in ('new', 'pending') 
+    and deleted_at is null 
+    and finished_at is null 
+    order by updated_at asc limit 1 )
+  returning task_id, distribution_id, operation_key, status, action, retries, metadata, result, started_at, updated_at
+`
+
+const updateTaskActionScript string = `
+  update tasks set
+    action = $2,
+    status = $3, 
+    retries = $4,
+    result = $5,
+    metadata = $6,
+    finished_at = $7,
+    started_at = $8,
+    updated_at = now()
+  where task_id = $1
+  and finished_at is null
+  and deleted_at is null
+  returning task_id, distribution_id, action, status, retries, result, metadata, created_at, updated_at, started_at, finished_at
 `

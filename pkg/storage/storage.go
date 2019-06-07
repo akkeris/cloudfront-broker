@@ -246,12 +246,6 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 	return services, nil
 }
 
-var selectDistScript = `
-    select distribution_id, plan_id, cloudfront_id, cloudfront_url, origin_access_identity, claimed, status, billing_code, caller_reference
-		from distributions
-    where distribution_id = $1
-`
-
 func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Distribution, error) {
 	distribution := &Distribution{}
 
@@ -265,6 +259,9 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
+		&distribution.CreatedAt,
+		&distribution.UpdatedAt,
+		&distribution.DeletedAt,
 	)
 
 	switch {
@@ -297,6 +294,9 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
+		&distribution.CreatedAt,
+		&distribution.UpdatedAt,
+		&distribution.DeletedAt,
 	)
 
 	switch {
@@ -317,12 +317,6 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 func (p *PostgresStorage) NewDistribution(distributionID string, planID string, billingCode string, callerReference string, status string) error {
 	var err error
 	var cnt int
-
-	var checkPlanScript = `
-    select count(*) from plans
-    where plan_id = $1
-    and deleted_at is null
-  `
 
 	err = p.db.QueryRow(checkPlanScript, planID).Scan(&cnt)
 
@@ -378,14 +372,6 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 		deletedAt = SetNullTime(nil)
 	}
 
-	updateDistributionScript := `
-    update distributions
-    set status = $2,
-        deleted_at = $3
-    where distribution_id = $1
-    returning distribution_id, status
-  `
-
 	err := p.db.QueryRow(updateDistributionScript, &distributionID, &status, &deletedAt).Scan(&d.DistributionID, &d.Status)
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
@@ -403,13 +389,6 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 
 func (p *PostgresStorage) UpdateDeleteDistribution(distributionID string) error {
 	var distDeleted string
-
-	updateDistributionDeleted := `
-    update distributions
-    set deleted_at = now()
-    where distribution_id = $1
-    returning distribution_id
-  `
 
 	err := p.db.QueryRow(updateDistributionDeleted, &distributionID).Scan(&distDeleted)
 
@@ -436,14 +415,7 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 		Valid:  true,
 	}
 
-	updateDistributionScript := `
-    update distributions
-    set cloudfront_id = $2,
-      cloudfront_url = $3
-    where distribution_id = $1
-    returning plan_id, cloudfront_id, cloudfront_url, origin_access_identity, claimed, status, billing_code
-  `
-	err = p.db.QueryRow(updateDistributionScript, &distributionID, cloudfrontIDStr, cloudfrontURLStr).Scan(
+	err = p.db.QueryRow(updateDistributionWithCloudfrontScript, &distributionID, cloudfrontIDStr, cloudfrontURLStr).Scan(
 		&d.PlanID, &d.CloudfrontID, &d.CloudfrontUrl, &d.OriginAccessIdentity, &d.Claimed, &d.Status, &d.BillingCode)
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
@@ -470,10 +442,7 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 		BillingCode:    sql.NullString{String: billingCode, Valid: true},
 	}
 
-	err := p.db.QueryRow(`insert into origins
-    (origin_id, distribution_id, bucket_name, bucket_url, billing_code)
-    values 
-    (uuid_generate_v4(), $1, $2, $3, $4) returning origin_id;`,
+	err := p.db.QueryRow(insertOriginScript,
 		distributionID, bucketName, bucketURL, origin.BillingCode).Scan(&origin.OriginID)
 
 	if err != nil {
@@ -486,11 +455,6 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 
 	return origin, nil
 }
-
-var selectOriginScript string = `
-    select origin_id, distribution_id, bucket_name, bucket_url, origin_path, iam_user, access_key, secret_key
-    from origins 
-`
 
 func (p *PostgresStorage) GetOriginByID(originID string) (*Origin, error) {
 	var selectOriginById string = selectOriginScript + "where origin_id = $1 and deleted_at is null"
@@ -536,14 +500,6 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID string) (*Origin, error) {
 	origin := &Origin{}
 
-	updateOriginScript := `
-		update origins
-		set deleted_at = now()
-		where origin_id = $1
-		and distribution_id = $2
-		returning origin_id, distribution_id;
-`
-
 	err := p.db.QueryRow(updateOriginScript, originID, distributionID).Scan(
 		&origin.OriginID,
 		&origin.DistributionID,
@@ -564,15 +520,8 @@ func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID str
 
 func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 	var err error
-	var getOriginScript = `
-    select origin_id from origins
-    where origin_id = $1
-    and deleted_at is null
-  `
 
-	origin := &Origin{}
-
-	err = p.db.QueryRow(getOriginScript, originID).Scan(&origin.OriginID)
+	_, err = p.GetOriginByID(originID)
 
 	switch {
 	case err == sql.ErrNoRows:
@@ -585,12 +534,7 @@ func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 		return errors.New(msg)
 	}
 
-	updateScript := `
-    update origins
-      set iam_user = $2
-      where origin_id = $1
-`
-	_, err = p.db.Exec(updateScript, originID, iAMUser)
+	_, err = p.db.Exec(updateOriginWithIAMScript, originID, iAMUser)
 
 	if err != nil {
 		msg := fmt.Sprintf("AddIAMUser: error updating origin: %s", err.Error())
@@ -603,15 +547,8 @@ func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 
 func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secretKey string) error {
 	var err error
-	var getOriginScript = `
-    select origin_id from origins
-    where origin_id = $1
-    and deleted_at is null
-  `
 
-	origin := &Origin{}
-
-	err = p.db.QueryRow(getOriginScript, originID).Scan(&origin.OriginID)
+	_, err = p.GetOriginByID(originID)
 
 	switch {
 	case err == sql.ErrNoRows:
@@ -624,13 +561,7 @@ func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secret
 		return errors.New(msg)
 	}
 
-	updateScript := `
-    update origins
-      set access_key = $2,
-          secret_key = $3
-      where origin_id = $1
-`
-	_, err = p.db.Exec(updateScript, originID, accessKey, secretKey)
+	_, err = p.db.Exec(updateOriginWithAccessKeyScript, originID, accessKey, secretKey)
 
 	if err != nil {
 		msg := fmt.Sprintf("AddAccessKey: error updating origin: %s", err.Error())
@@ -641,32 +572,26 @@ func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secret
 	return nil
 }
 
-func (p *PostgresStorage) AddOriginAccessIdentity(distributionID string, originAccessIdentity string) (*Distribution, error) {
+func (p *PostgresStorage) UpdateDistributionWIthOriginAccessIdentity(distributionID string, originAccessIdentity string) error {
 	var err error
 
-	distribution, err := p.GetDistribution(distributionID)
+	_, err = p.GetDistribution(distributionID)
 
 	if err != nil {
-		msg := fmt.Sprintf("AddOriginAccessIdentity: distribution not found: %s", err.Error())
+		msg := fmt.Sprintf("UpdateDistributionWIthOriginAccessIdentity: distribution not found: %s", err.Error())
 		glog.Error(msg)
-		return distribution, errors.New(msg)
+		return errors.New(msg)
 	}
 
-	updateScript := `
-    update distributions
-      set origin_access_identity = $2
-    where distribution_id = $1
-`
-
-	_, err = p.db.Exec(updateScript, distributionID, originAccessIdentity)
+	_, err = p.db.Exec(updateDistWithOAIScript, distributionID, originAccessIdentity)
 
 	if err != nil {
-		msg := fmt.Sprintf("AddOriginAccessIdentity: error updating distribution: %s", err.Error())
+		msg := fmt.Sprintf("UpdateDistributionWIthOriginAccessIdentity: error updating distribution: %s", err.Error())
 		glog.Error(msg)
-		return nil, errors.New(msg)
+		return errors.New(msg)
 	}
 
-	return distribution, nil
+	return nil
 }
 
 func (p *PostgresStorage) deleteItDistribution(distributionID string) error {

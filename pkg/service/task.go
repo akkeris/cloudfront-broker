@@ -86,7 +86,7 @@ func curTaskStop(curTask *storage.Task) *storage.Task {
 
 func curTaskFailed(curTask *storage.Task, msg string) *storage.Task {
 	curTask.Status = statusFailed
-	curTask.Result = storage.SetNullString(storage.StatusFailed)
+	curTask.Result = storage.SetNullString(statusFailed)
 	curTask.Metadata = storage.SetNullString(msg)
 	return curTaskStop(curTask)
 }
@@ -152,7 +152,7 @@ func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 	task := &storage.Task{
 		DistributionID: *cf.distributionID,
 		Action:         NextAction[actionCreateNew],
-		Status:         statusPending,
+		Status:         statusNew,
 		Retries:        0,
 		OperationKey:   sql.NullString{String: *cf.operationKey, Valid: true},
 		Result:         sql.NullString{String: OperationInProgress, Valid: true},
@@ -378,7 +378,7 @@ func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
 	task := &storage.Task{
 		DistributionID: *cf.distributionID,
 		Action:         NextAction[actionDeleteNew],
-		Status:         statusPending,
+		Status:         statusNew,
 		Retries:        0,
 		OperationKey:   storage.SetNullString(*cf.operationKey),
 		Result:         storage.SetNullString(OperationInProgress),
@@ -562,6 +562,7 @@ func (svc *AwsConfig) RunTasks() {
 		cf.operationKey = &curTask.OperationKey.String
 
 		if action, ok := actions[curTask.Action]; ok {
+			curTask.Status = statusPending
 			curTask, err = action(svc, curTask, cf)
 
 			if err != nil {

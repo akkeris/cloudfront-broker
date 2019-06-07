@@ -475,7 +475,7 @@ func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) error {
 
 	glog.Infof("createOriginAccessIdentity: oai id: %s", *cf.originAccessIdentity)
 
-	_, err = s.stg.AddOriginAccessIdentity(*cf.distributionID, *cf.originAccessIdentity)
+	err = s.stg.UpdateDistributionWIthOriginAccessIdentity(*cf.distributionID, *cf.originAccessIdentity)
 	if err != nil {
 		msg := fmt.Sprintf("createOriginAccessIdenity: error adding: %s", err.Error())
 		glog.Error(msg)
