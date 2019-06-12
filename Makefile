@@ -3,7 +3,7 @@
 
 NAME=cloudfront-broker
 
-IMAGE ?= quay.octanner.io/cloudops/$(NAME)
+IMAGE ?= akkeris/$(NAME)
 TAG ?= $(shell git describe --tags --always)
 PULL ?= IfNotPresent
 
@@ -18,22 +18,20 @@ $(NAME): $(SRC) ## Builds the cloudfront-broker
 test: ## Runs the tests
 	go test $(PKG)
 
-	#go test -v $(shell go list ./... | grep -v /vendor/ | grep -v /test/)
-
 linux: $(NAME)-linux ## Builds a Linux executable
 
 $(NAME)-linux: $(SRC) ## Builds a Linux executable
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-	go build -o $(NAME)-linux --ldflags="-s" $(NAME)/servicebroker
+	go build -o $(NAME)-linux --ldflags="-s" $(NAME).go
 
 image: linux ## Builds a Linux based docker image
-	cp $(NAME)-linux image/$(NAME)
-	docker build -t "$(IMAGE):$(TAG)" image
+	mv $(NAME)-linux $(NAME)
+	docker build -t "$(IMAGE):$(TAG)" .
+	rm $(NAME)
 
 clean: ## Cleans up build artifacts
 	rm -f $(NAME)
 	rm -f $(NAME)-linux
-	rm -f image/$(NAME)
 	go clean --cache
 
 
@@ -47,14 +45,10 @@ deploy-helm: image ## Deploys image with helm
 	--set image="$(IMAGE):$(TAG)",imagePullPolicy="$(PULL)"
 
 lint: $(SRC)
-	golint pkg/...
+	golint $(SRC)
 
 vet: $(SRC)
 	go vet $(NAME)/pkg/...
-
-tidy: $(SRC)
-	go mod tidy
-	go mod verify
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'

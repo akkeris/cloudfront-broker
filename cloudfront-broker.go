@@ -128,7 +128,7 @@ func runWithContext(ctx context.Context) error {
 		}
 		// create TokenReviewMiddleware
 		tr := middleware.TokenReviewMiddleware{
-			TokenReview: k8sClient.Authentication().TokenReviews(),
+			TokenReview: k8sClient.AuthenticationV1().TokenReviews(),
 			Authorizer:  authz,
 		}
 		// Use TokenReviewMiddleware.
