@@ -323,7 +323,7 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("NewDistribution: can not find plan: %s", err.Error())
 		glog.Error(msg)
-		errors.New(msg)
+		return errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("NewDistribution: error finding plan: %s", err.Error())
 		glog.Error(msg)

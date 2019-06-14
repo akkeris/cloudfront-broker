@@ -1,0 +1,51 @@
+version: 2
+jobs:
+  build:
+    working_directory: /app
+    docker:
+      - image: golang:1.12-alpine
+      - image: circleci/postgres:9.6.2-alpine
+        environment:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: test
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Run tests
+          environment:
+            DATABASE_URL: postgres://root:root@localhost:5432/test\?sslmode=disable
+            NAME_PREFIX:  testit
+            REGION:       us-west-2
+            WAIT_SECONDS: 30
+            GO111MODULE: on
+          command: |
+            apk update --no-progress -q
+            apk add openssl ca-certificates git make build-base nodejs npm docker --no-progress -q
+            mkdir -p /go/src/github.com/akkeris/
+            cp -a -p . /go/src/github.com/akkeris/cloudfront-broker
+            cd /go/src/github.com/akkeris/cloudfront-broker
+            make coverage
+            go get github.com/schrej/godacov
+            godacov -t $CODACY_PROJECT_TOKEN -r ./cover.out -c ${CIRCLE_SHA1}
+      - run:
+          name: Build application docker image
+          command: |
+            make image
+      - deploy:
+          name: Push application Docker image
+          command: |
+            if [ "${CIRCLE_BRANCH}" != "release" ]; then
+              if [ "${CIRCLE_PROJECT_USERNAME}" == "akkeris" ]; then
+                docker login -u $DOCKER_LOGIN -p $DOCKER_PASS
+                docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
+                docker push "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
+                if [ "${CIRCLE_BRANCH}" == "master" ]; then
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
+                  docker push "docker.io/akkeris/cloudfront-broker:latest"
+                  docker push "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
+                fi
+              fi
+            fi

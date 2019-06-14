@@ -2,21 +2,29 @@
 #
 
 NAME=cloudfront-broker
+REPO=akkeris
 
-IMAGE ?= akkeris/$(NAME)
+IMAGE ?= $(NAME)
 TAG ?= $(shell git describe --tags --always)
 PULL ?= IfNotPresent
 
-SRC=*.go pkg/*/*.go
+
+SRC=*.go pkg/*/*
+SRCDIR=pkg/boker pkg/storage pkg/service
 PKG=$(NAME)/pkg/broker $(NAME)/pkg/storage $(NAME)/pkg/service
 
 build: $(NAME) ## Builds the cloudfront-broker
 
-$(NAME): $(SRC) ## Builds the cloudfront-broker
+$(NAME): $(SRC)
 	go build -i  -o $(NAME) .
 
 test: ## Runs the tests
-	go test $(PKG)
+	go get github.com/smartystreets/goconvey
+	go test $(shell go list ./... | grep -v /vendor/ | grep -v /test) -logtostderr=1 -stderrthreshold 0
+
+coverage: ## Runs the tests with coverage
+	go get github.com/smartystreets/goconvey
+	go test -timeout 2400s -coverprofile cover.out -v $(shell go list ./... | grep -v /vendor/ | grep -v /test)  -logtostderr=1 -stderrthreshold 0
 
 linux: $(NAME)-linux ## Builds a Linux executable
 
@@ -32,23 +40,22 @@ image: linux ## Builds a Linux based docker image
 clean: ## Cleans up build artifacts
 	rm -f $(NAME)
 	rm -f $(NAME)-linux
-	go clean --cache
+	rm -f cover.out
+	#go clean --cache
 
+tag: image
+	docker tag $(IMAGE) $(REPO)/$(IMAGE):$(TAG)
 
 push: image ## Pushes the image
-	docker push $(IMAGE):$(TAG)
-	docker push $(IMAGE)
-
-deploy-helm: image ## Deploys image with helm
-	helm upgrade --install broker-skeleton --namespace broker-skeleton \
-	charts/$(NAME) \
-	--set image="$(IMAGE):$(TAG)",imagePullPolicy="$(PULL)"
+	docker push $(REPO)/$(IMAGE):$(TAG)
+	docker push $(REPO)/$(IMAGE)
 
 lint: $(SRC)
-	golint $(SRC)
+	golint $(NAME).go
+	golint pkg/...
 
-vet: $(SRC)
-	go vet $(NAME)/pkg/...
+tidy: $(SRC)
+	go mod tidy
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
