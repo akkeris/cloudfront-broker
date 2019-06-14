@@ -19,7 +19,6 @@ jobs:
             NAME_PREFIX:  testit
             REGION:       us-west-2
             WAIT_SECONDS: 30
-            GO111MODULE: on
           command: |
             apk update --no-progress -q
             apk add openssl ca-certificates git make build-base nodejs npm docker --no-progress -q
