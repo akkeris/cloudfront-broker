@@ -34,7 +34,7 @@ $(NAME)-linux: $(SRC) ## Builds a Linux executable
 
 image: linux ## Builds a Linux based docker image
 	mv $(NAME)-linux $(NAME)
-	docker build -t "$(IMAGE):$(TAG)" .
+	docker build -t "$(IMAGE)" .
 	rm $(NAME)
 
 clean: ## Cleans up build artifacts
