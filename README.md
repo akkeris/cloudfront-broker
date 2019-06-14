@@ -1,5 +1,7 @@
 # Akkeris AWS Cloudfront Broker
 
+[![CircleCI](https://circleci.com/gh/akkeris/cloudfront-broker.svg?style=svg)](https://circleci.com/gh/akkeris/cloudfront-broker) [![Codacy Badge](https://api.codacy.com/project/badge/Grade/bca1527edfdd4508aa67d71a813d3de5)](https://www.codacy.com/app/Akkeris/cloudfront-broker?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=akkeris/cloudfront-broker&amp;utm_campaign=Badge_Grade) [![Codacy Badge](https://api.codacy.com/project/badge/Coverage/bca1527edfdd4508aa67d71a813d3de5)](https://www.codacy.com/app/Akkeris/cloudfront-broker?utm_source=github.com&utm_medium=referral&utm_content=akkeris/cloudfront-broker&utm_campaign=Badge_Coverage)
+
 Broker to create AWS **Cloudfront Distributions** for use as a content distribution network(CDN).
 Broker creates an AWS S3 bucket as the primary origin.
 
