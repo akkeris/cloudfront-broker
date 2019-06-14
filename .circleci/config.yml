@@ -41,10 +41,10 @@ jobs:
                 docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
                 docker push "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
                 if [ "${CIRCLE_BRANCH}" == "master" ]; then
-                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}-beta"
                   docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
                   docker push "docker.io/akkeris/cloudfront-broker:latest"
-                  docker push "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
+                  docker push "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}-beta"
                 fi
               fi
             fi
