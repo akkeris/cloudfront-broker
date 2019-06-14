@@ -15,7 +15,7 @@ jobs:
       - run:
           name: Run tests
           environment:
-            DATABASE_URL: postgres://root:root@localhost:5432/test\?sslmode=disable
+            DATABASE_URL: postgres://root:root@localhost:5432/test?sslmode=disable
             NAME_PREFIX:  testit
             REGION:       us-west-2
             WAIT_SECONDS: 30
