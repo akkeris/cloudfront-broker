@@ -1,6 +1,3 @@
-// Author: ned.hanks
-// Date Created: December 7, 2018
-// Project:
 package service
 
 import (
@@ -18,9 +15,9 @@ import (
 )
 
 func (s *AwsConfig) genBucketName() *string {
-	newUuid, _ := uuid.NewV4()
+	newUUID, _ := uuid.NewV4()
 
-	bucketName := strings.Split(newUuid.String(), "-")[0]
+	bucketName := strings.Split(newUUID.String(), "-")[0]
 	bucketName = s.namePrefix + "-" + bucketName
 
 	return &bucketName
@@ -111,7 +108,7 @@ func (s *AwsConfig) getBucket(originID string) *s3Bucket {
 
 	s3BucketOut := &s3Bucket{
 		bucketName: &origin.BucketName,
-		bucketURI:  &origin.BucketUrl,
+		bucketURI:  &origin.BucketURL,
 		originID:   &origin.OriginID,
 		iAMUser: &iAMUser{
 			userName:  &origin.IAMUser.String,

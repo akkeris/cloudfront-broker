@@ -47,16 +47,18 @@ const (
 	statusFinished  string = "finished"
 )
 
+// OriginID type cast to string
 type OriginID struct {
 	OriginID string
 }
 
+// IAMUser holds AWS IAM user
 type IAMUser struct {
 	OriginID string
 	UserName string
 }
 
-var NextAction = map[string]string{
+var nextAction = map[string]string{
 	actionCreateNew:                   actionCreateOrigin,
 	actionCreateOrigin:                actionCreateIAMUser,
 	actionCreateIAMUser:               actionCreateAccessKey,
@@ -137,6 +139,7 @@ func (svc *AwsConfig) getTaskState(distributionID string) (*osb.LastOperationRes
 	return taskState, nil
 }
 
+// ActionCreateNew sets up the action to create a new distribution
 func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 	glog.Infof("===== actionCreateNew [%s] =====", *cf.operationKey)
 
@@ -151,7 +154,7 @@ func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 	now := time.Now()
 	task := &storage.Task{
 		DistributionID: *cf.distributionID,
-		Action:         NextAction[actionCreateNew],
+		Action:         nextAction[actionCreateNew],
 		Status:         statusNew,
 		Retries:        0,
 		OperationKey:   sql.NullString{String: *cf.operationKey, Valid: true},
@@ -187,7 +190,7 @@ func (svc *AwsConfig) actionCreateOrigin(curTask *storage.Task, cf *cloudFrontIn
 	originID := &OriginID{OriginID: *cf.s3Bucket.originID}
 	originIDb, _ := json.Marshal(originID)
 	curTask.Metadata = storage.SetNullString(string(originIDb))
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -224,7 +227,7 @@ func (svc *AwsConfig) actionCreateIAMUser(curTask *storage.Task, cf *cloudFrontI
 		Valid:  true,
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -244,10 +247,9 @@ func (svc *AwsConfig) actionCreateAccessKey(curTask *storage.Task, cf *cloudFron
 			glog.Error(msg)
 			curTask = curTaskFailed(curTask, "error creating access key")
 			return curTask, errors.New(msg)
-		} else {
-			curTask.Result = storage.SetNullString("")
-			curTask.Metadata = storage.SetNullString("")
 		}
+		curTask.Result = storage.SetNullString("")
+		curTask.Metadata = storage.SetNullString("")
 	} else if err != nil {
 		msg := fmt.Sprintf("actionCreateAccessKey[%s]: error: %s", *cf.operationKey, err.Error())
 		glog.Error(msg)
@@ -258,7 +260,7 @@ func (svc *AwsConfig) actionCreateAccessKey(curTask *storage.Task, cf *cloudFron
 		return curTask, nil
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	curTask.Retries = 0
 	return curTask, nil
 }
@@ -274,7 +276,7 @@ func (svc *AwsConfig) actionCreateOriginAccessIdentity(curTask *storage.Task, cf
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -295,7 +297,7 @@ func (svc *AwsConfig) actionIsOriginAccessIdentityReady(curTask *storage.Task, c
 		curTask.Retries = 0
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -310,7 +312,7 @@ func (svc *AwsConfig) actionCreateDistribution(curTask *storage.Task, cf *cloudF
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -324,7 +326,7 @@ func (svc *AwsConfig) actionAddBucketPolicy(curTask *storage.Task, cf *cloudFron
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -344,7 +346,7 @@ func (svc *AwsConfig) actionIsDistributionDeployed(curTask *storage.Task, cf *cl
 		curTask.Retries = 0
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 
 	return curTask, nil
 }
@@ -360,10 +362,11 @@ func (svc *AwsConfig) actionCreated(curTask *storage.Task, cf *cloudFrontInstanc
 	}
 
 	curTask = curTaskFinished(curTask, statusDeployed, "cloudfront distribution created and deployed")
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
+// ActionDeleteNew sets up the action to delete a distribution
 func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
 	glog.Infof("===== actionDeleteNew [%s] =====", *cf.operationKey)
 
@@ -377,7 +380,7 @@ func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
 	now := time.Now()
 	task := &storage.Task{
 		DistributionID: *cf.distributionID,
-		Action:         NextAction[actionDeleteNew],
+		Action:         nextAction[actionDeleteNew],
 		Status:         statusNew,
 		Retries:        0,
 		OperationKey:   storage.SetNullString(*cf.operationKey),
@@ -417,7 +420,7 @@ func (svc *AwsConfig) actionDisableDistribution(curTask *storage.Task, cf *cloud
 		return nil, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -431,7 +434,7 @@ func (svc *AwsConfig) actionDeleteOrigin(curTask *storage.Task, cf *cloudFrontIn
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -445,7 +448,7 @@ func (svc *AwsConfig) actionDeleteIAMUser(curTask *storage.Task, cf *cloudFrontI
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -466,7 +469,7 @@ func (svc *AwsConfig) actionIsDistributionDisabled(curTask *storage.Task, cf *cl
 		curTask.Retries = 0
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -480,7 +483,7 @@ func (svc *AwsConfig) actionDeleteDistribution(curTask *storage.Task, cf *cloudF
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -494,7 +497,7 @@ func (svc *AwsConfig) actionDeleteOriginAccessIdentity(curTask *storage.Task, cf
 		return curTask, errors.New(msg)
 	}
 
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 
@@ -508,7 +511,7 @@ func (svc *AwsConfig) actionDeleted(curTask *storage.Task, cf *cloudFrontInstanc
 	}
 
 	curTask = curTaskFinished(curTask, statusDeleted, "cloudfront distribution disabled and deleted")
-	curTask.Action = NextAction[curTask.Action]
+	curTask.Action = nextAction[curTask.Action]
 	return curTask, nil
 }
 

@@ -11,8 +11,8 @@ import (
 	"github.com/pmorie/osb-broker-lib/pkg/broker"
 )
 
-// HttpWrite is used to write data to outgoing http response
-func HttpWrite(w http.ResponseWriter, status int, obj interface{}) {
+// httpWrite is used to write data to outgoing http response
+func httpWrite(w http.ResponseWriter, status int, obj interface{}) {
 	data, err := json.Marshal(obj)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -43,20 +43,19 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 				if httpErr.ErrorMessage != nil {
 					body.ErrorMessage = httpErr.ErrorMessage
 				}
-				HttpWrite(w, httpErr.StatusCode, body)
-				return
-			} else {
-				msg := "InternalServerError"
-				description := "Internal Server Error"
-				body := &e{ErrorMessage: &msg, Description: &description}
-				HttpWrite(w, 500, body)
+				httpWrite(w, httpErr.StatusCode, body)
 				return
 			}
+			msg := "InternalServerError"
+			description := "Internal Server Error"
+			body := &e{ErrorMessage: &msg, Description: &description}
+			httpWrite(w, 500, body)
+			return
 		}
 		if obj != nil {
-			HttpWrite(w, http.StatusOK, obj)
+			httpWrite(w, http.StatusOK, obj)
 		} else {
-			HttpWrite(w, http.StatusOK, map[string]string{})
+			httpWrite(w, http.StatusOK, map[string]string{})
 		}
 	}).Methods(method)
 }

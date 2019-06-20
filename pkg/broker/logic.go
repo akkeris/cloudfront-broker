@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Masterminds/semver"
 	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
@@ -30,8 +31,8 @@ type BusinessLogic struct {
 var _ broker.Interface = &BusinessLogic{}
 
 func newOpKey(prefix string) string {
-	newUuid, _ := uuid.NewV4()
-	return prefix + strings.Split(newUuid.String(), "-")[0]
+	newUUID, _ := uuid.NewV4()
+	return prefix + strings.Split(newUUID.String(), "-")[0]
 }
 
 // NewBusinessLogic creates and returns a BusinessLogic structure
@@ -96,7 +97,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	}
 	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
 
-	stg, err := storage.InitStorage(ctx, o.DatabaseUrl)
+	stg, err := storage.InitStorage(ctx, o.DatabaseURL)
 	return stg, namePrefix, waitSecs, maxRetries, err
 }
 
@@ -148,8 +149,8 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		return nil, UnprocessableEntityWithMessage("PlanRequired", "The plan ID was not provided.")
 	}
 
-	newUuid, _ := uuid.NewV4()
-	callerReference := newUuid.String()
+	newUUID, _ := uuid.NewV4()
+	callerReference := newUUID.String()
 
 	operationKey := newOpKey("PRV")
 	respOpKey := osb.OperationKey(operationKey)
@@ -265,10 +266,10 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 
 	if err != nil {
 		return nil, BadRequestError(err.Error())
-	} else {
-		if !found {
-			return nil, BadRequestError("instance not found")
-		}
+	}
+
+	if !found {
+		return nil, BadRequestError("instance not found")
 	}
 
 	state, err := b.service.CheckLastOperation(distributionID)
@@ -307,11 +308,28 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 
 // ValidateBrokerAPIVersion verifies the client OSB version with support OSB versions
 func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
-	// TODO valid OSB api version 2.13+
+	c, err := semver.NewConstraint(">=" + OSBVersion)
+	if err != nil {
+		return errors.New("invalid internal version")
+	}
+
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		msg := fmt.Sprintf("invalid received version: %s", version)
+		return errors.New(msg)
+	}
+
+	a := c.Check(v)
+
+	if !a {
+		msg := fmt.Sprintf("unsupported version: %s < %s", version, OSBVersion)
+		return errors.New(msg)
+	}
+
 	return nil
 }
 
-// RunTasksInBackground startes the background processing
+// RunTasksInBackground starts the background processing
 func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) {
 	b.service.RunTasks()
 }

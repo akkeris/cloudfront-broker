@@ -261,7 +261,7 @@ const updateDistributionWithCloudfrontScript string = `
   returning plan_id, cloudfront_id, cloudfront_url, origin_access_identity, claimed, status, billing_code
 `
 
-const updateDistributionDeleted string = `
+const updateDistributionDeletedScript string = `
   update distributions
   set deleted_at = now()
   where distribution_id = $1
@@ -286,7 +286,7 @@ const selectOriginScript string = `
   from origins 
 `
 
-const updateOriginScript string = `
+const updateOriginDeletedScript string = `
   update origins
   set deleted_at = now()
   where origin_id = $1
