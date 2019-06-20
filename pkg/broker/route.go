@@ -11,6 +11,7 @@ import (
 	"github.com/pmorie/osb-broker-lib/pkg/broker"
 )
 
+// HttpWrite is used to write data to outgoing http response
 func HttpWrite(w http.ResponseWriter, status int, obj interface{}) {
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -60,6 +61,7 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 	}).Methods(method)
 }
 
+// AddRoutes adds extra routes not in broker interface
 func (b *BusinessLogic) AddRoutes(router *mux.Router) {
 	b.addRoute(router, "", "GET", b.GetInstance)
 }
