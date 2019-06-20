@@ -5,13 +5,14 @@
 Broker to create AWS **Cloudfront Distributions** for use as a content distribution network(CDN).
 Broker creates an AWS S3 bucket as the primary origin.
 
-Specifications of created distribution:
-  * Cloudfront Distribution
-    * HTTP -> HTTPS
-    * cloudfront.net Certs
-  * S3 Bucket
-    * Bucket policy to only allow associated cloudfront distribution read access
-    * IAM api user for managing objects in S3 bucket
+## Specifications of created distribution:
+
+### Cloudfront Distribution
+* HTTP -> HTTPS
+* cloudfront.net Certs
+### S3 Bucket
+* Bucket policy to only allow associated cloudfront distribution read access
+* IAM api user for managing objects in S3 bucket
     
 ## Installing
  
