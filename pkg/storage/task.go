@@ -8,6 +8,7 @@ import (
 	// pq "github.com/lib/pq"
 )
 
+// Status's
 const (
 	StatusNew      string = "new"
 	StatusPending  string = "pending"
@@ -15,6 +16,7 @@ const (
 	StatusFailed   string = "failed"
 )
 
+// AddTask inserts task into tasks table
 func (p *PostgresStorage) AddTask(task *Task) (*Task, error) {
 	var err error
 
@@ -31,6 +33,7 @@ func (p *PostgresStorage) AddTask(task *Task) (*Task, error) {
 	return task, nil
 }
 
+// GetTaskByDistribution retrieves task by distribution id
 func (p *PostgresStorage) GetTaskByDistribution(distributionID string) (*Task, error) {
 	glog.Infof("===== GetTaskByDistribution [%s] =====", distributionID)
 	task := Task{}
@@ -46,6 +49,7 @@ func (p *PostgresStorage) GetTaskByDistribution(distributionID string) (*Task, e
 	return &task, nil
 }
 
+// PopNextTask retrieves next task from tasks table
 func (p *PostgresStorage) PopNextTask() (*Task, error) {
 	var err error
 	var task Task
@@ -59,6 +63,7 @@ func (p *PostgresStorage) PopNextTask() (*Task, error) {
 	return &task, nil
 }
 
+// UpdateTaskAction updates a task in the db
 func (p *PostgresStorage) UpdateTaskAction(task *Task) (*Task, error) {
 	var err error
 

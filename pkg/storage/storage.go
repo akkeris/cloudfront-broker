@@ -1,6 +1,4 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project: cloudfront-broker
+// Package storage interacts with the postgres database
 package storage
 
 import (
@@ -17,16 +15,19 @@ import (
 	"github.com/golang/glog"
 	"github.com/lib/pq"
 
+	// postgres database routines
 	_ "github.com/lib/pq"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
+// Status messages
 const (
 	DistributionNotFound = "DistributionNotFound"
 	DistributionFound    = "DistributionFound"
 	OriginNotFound       = "OriginNotFound"
 )
 
+// PostgresStorage holds connection link to database
 type PostgresStorage struct {
 	// Storage
 	db *sql.DB
@@ -56,20 +57,15 @@ func nullStringValue(ns sql.NullString) string {
 	return blank
 }
 
+// NullString returns string from db null string field
 func (p *PostgresStorage) NullString(ns sql.NullString) *string {
 	var r string
-	/*
-		if s.Valid {
-			return &s.String
-		}
-
-		return nil
-	*/
 
 	r = nullStringValue(ns)
 	return &r
 }
 
+// SetNullString sets the struct members for a sql null string based on passed in string
 func SetNullString(s string) sql.NullString {
 	ns := sql.NullString{}
 
@@ -84,6 +80,7 @@ func SetNullString(s string) sql.NullString {
 	return ns
 }
 
+// SetNullTime sets the struct members for a postgres time based on passed in time value
 func SetNullTime(t *time.Time) pq.NullTime {
 	nt := pq.NullTime{}
 	switch {
@@ -96,22 +93,23 @@ func SetNullTime(t *time.Time) pq.NullTime {
 	return nt
 }
 
-func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, error) {
+// InitStorage creates connection to the postgres database
+func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, error) {
 	var err error
 	err = nil
 	// Sanity checks
-	if DatabaseUrl == "" && os.Getenv("DATABASE_URL") != "" {
-		DatabaseUrl = os.Getenv("DATABASE_URL")
+	if DatabaseURL == "" && os.Getenv("DATABASE_URL") != "" {
+		DatabaseURL = os.Getenv("DATABASE_URL")
 	}
 
-	if DatabaseUrl == "" {
+	if DatabaseURL == "" {
 		glog.Error("Unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option.")
 		return nil, errors.New("unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option")
 	}
 
-	glog.Infof("DATABASE_URL=%s", DatabaseUrl)
+	glog.Infof("DATABASE_URL=%s", DatabaseURL)
 
-	db, err := sql.Open("postgres", DatabaseUrl)
+	db, err := sql.Open("postgres", DatabaseURL)
 	if err != nil {
 		glog.Errorf("Unable to open database: %s\n", err.Error())
 		return nil, errors.New("Unable to open database: " + err.Error())
@@ -152,8 +150,8 @@ func InitStorage(ctx context.Context, DatabaseUrl string) (*PostgresStorage, err
 	return &pgStorage, nil
 }
 
-func getCatalogPlans(db *sql.DB, serviceId string) ([]osb.Plan, error) {
-	rows, err := db.Query(plansQuery+"and services.service_id = $1 order by plans.name", serviceId)
+func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
+	rows, err := db.Query(plansQuery+"and services.service_id = $1 order by plans.name", serviceID)
 	if err != nil {
 		glog.Errorf("getPlans query failed: %s\n", err.Error())
 		return nil, err
@@ -193,8 +191,9 @@ func getCatalogPlans(db *sql.DB, serviceId string) ([]osb.Plan, error) {
 	return plans, nil
 }
 
+// GetServicesCatalog retrieves OSB services from the db
 func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
-	var planUpdateable bool = true
+	var planUpdateable = true
 
 	services := make([]osb.Service, 0)
 
@@ -246,6 +245,7 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 	return services, nil
 }
 
+// GetDistributionWithDeleted retrieves the distribution from database
 func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Distribution, error) {
 	distribution := &Distribution{}
 
@@ -253,9 +253,9 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 		&distribution.DistributionID,
 		&distribution.PlanID,
 		&distribution.CloudfrontID,
-		&distribution.CloudfrontUrl,
+		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,
-		&distribution.CloudfrontUrl,
+		&distribution.CloudfrontURL,
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
@@ -279,6 +279,9 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 
 }
 
+// GetDistribution retrieves distribution that does not have a deleted at date/time set
+// a aistribtuions is not deleted from the database, it's deletedat date/time is set to
+// signify it's been deleted from AWS.
 func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution, error) {
 	selectDist := selectDistScript + "and deleted_at is null"
 
@@ -288,9 +291,9 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 		&distribution.DistributionID,
 		&distribution.PlanID,
 		&distribution.CloudfrontID,
-		&distribution.CloudfrontUrl,
+		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,
-		&distribution.CloudfrontUrl,
+		&distribution.CloudfrontURL,
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
@@ -314,6 +317,7 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 
 }
 
+// NewDistribution inserts distribution
 func (p *PostgresStorage) NewDistribution(distributionID string, planID string, billingCode string, callerReference string, status string) error {
 	var err error
 	var cnt int
@@ -360,6 +364,7 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 	return nil
 }
 
+// UpdateDistributionStatus update distribution status, checking if should mark as deleted
 func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status string, delete bool) error {
 	d := &Distribution{}
 
@@ -387,10 +392,11 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 	return nil
 }
 
+// UpdateDeleteDistribution marks distribution as deleted from AWS
 func (p *PostgresStorage) UpdateDeleteDistribution(distributionID string) error {
 	var distDeleted string
 
-	err := p.db.QueryRow(updateDistributionDeleted, &distributionID).Scan(&distDeleted)
+	err := p.db.QueryRow(updateDistributionDeletedScript, &distributionID).Scan(&distDeleted)
 
 	if err != nil {
 		msg := fmt.Sprintf("DeleteDistribution: error setting deleted_at: %s", err.Error())
@@ -401,6 +407,7 @@ func (p *PostgresStorage) UpdateDeleteDistribution(distributionID string) error 
 	return nil
 }
 
+// UpdateDistributionCloudfront updates distribution with cloudfront info
 func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cloudfrontID string, cloudfrontURL string) (*Distribution, error) {
 	var err error
 	d := &Distribution{}
@@ -416,7 +423,7 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 	}
 
 	err = p.db.QueryRow(updateDistributionWithCloudfrontScript, &distributionID, cloudfrontIDStr, cloudfrontURLStr).Scan(
-		&d.PlanID, &d.CloudfrontID, &d.CloudfrontUrl, &d.OriginAccessIdentity, &d.Claimed, &d.Status, &d.BillingCode)
+		&d.PlanID, &d.CloudfrontID, &d.CloudfrontURL, &d.OriginAccessIdentity, &d.Claimed, &d.Status, &d.BillingCode)
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("UpdateDistributionCloudfront: distribution not found: %s", err.Error())
@@ -431,13 +438,14 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 	return d, nil
 }
 
+// AddOrigin inserts origin into origins table
 func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bucketURL string, originPath string, billingCode string) (*Origin, error) {
 	glog.Info("===== AddOrigin =====")
 
 	origin := &Origin{
 		DistributionID: distributionID,
 		BucketName:     bucketName,
-		BucketUrl:      bucketURL,
+		BucketURL:      bucketURL,
 		OriginPath:     originPath,
 		BillingCode:    sql.NullString{String: billingCode, Valid: true},
 	}
@@ -456,19 +464,21 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 	return origin, nil
 }
 
+// GetOriginByID retrieves origin from db by origin id
 func (p *PostgresStorage) GetOriginByID(originID string) (*Origin, error) {
-	var selectOriginById string = selectOriginScript + "where origin_id = $1 and deleted_at is null"
+	var selectOriginByID = selectOriginScript + "where origin_id = $1 and deleted_at is null"
 
-	return p.GetOrigin(selectOriginById, originID)
+	return p.getOrigin(selectOriginByID, originID)
 }
 
+// GetOriginByDistributionID retrieves origin from db by distribution id
 func (p *PostgresStorage) GetOriginByDistributionID(distributionID string) (*Origin, error) {
-	var selectOriginById string = selectOriginScript + "where distribution_id = $1 and deleted_at is null"
+	var selectOriginByID = selectOriginScript + "where distribution_id = $1 and deleted_at is null"
 
-	return p.GetOrigin(selectOriginById, distributionID)
+	return p.getOrigin(selectOriginByID, distributionID)
 }
 
-func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Origin, error) {
+func (p *PostgresStorage) getOrigin(selectOrigin string, selectKey string) (*Origin, error) {
 
 	origin := &Origin{}
 
@@ -476,7 +486,7 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 		&origin.OriginID,
 		&origin.DistributionID,
 		&origin.BucketName,
-		&origin.BucketUrl,
+		&origin.BucketURL,
 		&origin.OriginPath,
 		&origin.IAMUser,
 		&origin.AccessKey,
@@ -485,11 +495,11 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 
 	switch {
 	case err == sql.ErrNoRows:
-		msg := fmt.Sprintf("GetOrigin: origin not found: %s", err.Error())
+		msg := fmt.Sprintf("getOrigin: origin not found: %s", err.Error())
 		glog.Info(msg)
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
-		msg := fmt.Sprintf("GetOrigin: error finding origin: %s", err.Error())
+		msg := fmt.Sprintf("getOrigin: error finding origin: %s", err.Error())
 		glog.Error(msg)
 		return nil, errors.New(msg)
 	}
@@ -497,10 +507,11 @@ func (p *PostgresStorage) GetOrigin(selectOrigin string, selectKey string) (*Ori
 	return origin, nil
 }
 
+// UpdateDeleteOrigin marks origin as deleted
 func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID string) (*Origin, error) {
 	origin := &Origin{}
 
-	err := p.db.QueryRow(updateOriginScript, originID, distributionID).Scan(
+	err := p.db.QueryRow(updateOriginDeletedScript, originID, distributionID).Scan(
 		&origin.OriginID,
 		&origin.DistributionID,
 	)
@@ -518,6 +529,7 @@ func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID str
 	return origin, nil
 }
 
+// AddIAMUser updates origin with IAM user data
 func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 	var err error
 
@@ -545,6 +557,7 @@ func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 	return nil
 }
 
+// AddAccessKey updates origin with access key and secret key
 func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secretKey string) error {
 	var err error
 
@@ -572,6 +585,7 @@ func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secret
 	return nil
 }
 
+// UpdateDistributionWIthOriginAccessIdentity updates distribution with origin access identity
 func (p *PostgresStorage) UpdateDistributionWIthOriginAccessIdentity(distributionID string, originAccessIdentity string) error {
 	var err error
 

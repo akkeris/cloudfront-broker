@@ -7,6 +7,7 @@ import (
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
+// ConflictErrorWithMessage return OSB conflict error
 func ConflictErrorWithMessage(description string) error {
 	return osb.HTTPStatusCodeError{
 		StatusCode:  http.StatusConflict,
@@ -14,6 +15,7 @@ func ConflictErrorWithMessage(description string) error {
 	}
 }
 
+// UnprocessableEntityWithMessage returns OSB unprocessable error with passwd message
 func UnprocessableEntityWithMessage(errMsg string, description string) error {
 	return osb.HTTPStatusCodeError{
 		ResponseError: errors.New(errMsg),
@@ -22,6 +24,7 @@ func UnprocessableEntityWithMessage(errMsg string, description string) error {
 	}
 }
 
+// UnprocessableEntity returns OSB unprocessable error
 func UnprocessableEntity() error {
 	description := "Un-processable Entity"
 	return osb.HTTPStatusCodeError{
@@ -30,6 +33,7 @@ func UnprocessableEntity() error {
 	}
 }
 
+// BadRequestError returns OSB bad request error
 func BadRequestError(d string) error {
 	errorMessage := "StatusBadRequest"
 	return osb.HTTPStatusCodeError{
@@ -39,6 +43,7 @@ func BadRequestError(d string) error {
 	}
 }
 
+// NotFound returns OSB not found error
 func NotFound() error {
 	description := "Not Found"
 	return osb.HTTPStatusCodeError{
@@ -47,6 +52,7 @@ func NotFound() error {
 	}
 }
 
+//NotFoundWithMessage returns OSB not found error with passed message
 func NotFoundWithMessage(errMsg string, description string) error {
 	return osb.HTTPStatusCodeError{
 		ResponseError: errors.New(errMsg),
@@ -55,6 +61,8 @@ func NotFoundWithMessage(errMsg string, description string) error {
 	}
 
 }
+
+// InternalServerErr returns OSB internal server error
 func InternalServerErr() error {
 	description := "Internal Server Error"
 	return osb.HTTPStatusCodeError{
@@ -63,6 +71,7 @@ func InternalServerErr() error {
 	}
 }
 
+// InternalServerErrWithMessage returns internal server error with passed message
 func InternalServerErrWithMessage(errMsg string, description string) error {
 	return osb.HTTPStatusCodeError{
 		ResponseError: errors.New(errMsg),
