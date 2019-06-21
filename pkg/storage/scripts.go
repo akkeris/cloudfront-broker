@@ -44,6 +44,9 @@ DO
       THEN
         CREATE DOMAIN cents AS int CHECK (value >= 0);
       END IF;
+      IF NOT exists (select 1 from pg_type where typname = 'costunit') then
+          CREATE TYPE costunit as enum('year', 'month', 'day', 'hour', 'minute', 'second', 'cycle', 'byte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte', 'op', 'unit');
+      end if;
 
       CREATE OR REPLACE FUNCTION mark_updated_column()
         RETURNS trigger AS
