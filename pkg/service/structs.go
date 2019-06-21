@@ -1,6 +1,3 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project:
 package service
 
 import (
@@ -12,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 )
 
+// AwsConfig holds values for AWS services interaction
 type AwsConfig struct {
 	namePrefix string
 	conf       *aws.Config
@@ -25,7 +23,7 @@ type cloudFrontInstance struct {
 	distributionID       *string
 	billingCode          *string
 	planID               *string
-	serviceId            *string
+	serviceID            *string
 	cloudfrontID         *string
 	cloudfrontURL        *string
 	callerReference      *string
@@ -49,13 +47,15 @@ type iAMUser struct {
 	secretKey *string
 }
 
+// InstanceSpec is what's returned to calling app
 type InstanceSpec struct {
-	CloudFrontUrl      string `json:"CLOUDFRONT_URL"`
+	CloudFrontURL      string `json:"CLOUDFRONT_URL"`
 	BucketName         string `json:"CF_BUCKET_NAME"`
 	AwsAccessKey       string `json:"CF_AWS_ACCESS_KEY"`
 	AwsSecretAccessKey string `json:"CF_AWS_SECRET_ACCESS_KEY"`
 }
 
+// Status strings from osb-service-lib
 var (
 	OperationInProgress = string(osb.StateInProgress)
 	OperationSucceeded  = string(osb.StateSucceeded)

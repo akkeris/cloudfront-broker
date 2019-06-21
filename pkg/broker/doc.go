@@ -8,3 +8,6 @@
 // - The NewBusinessLogic function, which creates a BusinessLogic from the
 //   Options the program is run with
 package broker
+
+// OSBVersion is the Open Service Broker Spec version for this broker
+const OSBVersion = "2.13"

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Masterminds/semver"
 	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
@@ -19,6 +20,7 @@ import (
 	"cloudfront-broker/pkg/storage"
 )
 
+// BusinessLogic holds the data used for processing.
 type BusinessLogic struct {
 	sync.RWMutex
 
@@ -29,10 +31,11 @@ type BusinessLogic struct {
 var _ broker.Interface = &BusinessLogic{}
 
 func newOpKey(prefix string) string {
-	newUuid, _ := uuid.NewV4()
-	return prefix + strings.Split(newUuid.String(), "-")[0]
+	newUUID, _ := uuid.NewV4()
+	return prefix + strings.Split(newUUID.String(), "-")[0]
 }
 
+// NewBusinessLogic creates and returns a BusinessLogic structure
 func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 	dbStore, namePrefix, waitSecs, maxRetries, err := InitFromOptions(ctx, o)
 
@@ -57,6 +60,8 @@ func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 	return bl, nil
 }
 
+// InitFromOptions accepts parameters for runtime initilization
+// It returns initialized values
 func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, string, int64, int64, error) {
 
 	var err error
@@ -92,10 +97,11 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	}
 	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
 
-	stg, err := storage.InitStorage(ctx, o.DatabaseUrl)
+	stg, err := storage.InitStorage(ctx, o.DatabaseURL)
 	return stg, namePrefix, waitSecs, maxRetries, err
 }
 
+// GetCatalog returns an  OSB catalog retreived from the DB
 func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {
 	var err error
 
@@ -118,6 +124,7 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 	return response, nil
 }
 
+// Provision starts the provisioning process
 func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.RequestContext) (*broker.ProvisionResponse, error) {
 	var billingCode string
 
@@ -142,8 +149,8 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		return nil, UnprocessableEntityWithMessage("PlanRequired", "The plan ID was not provided.")
 	}
 
-	newUuid, _ := uuid.NewV4()
-	callerReference := newUuid.String()
+	newUUID, _ := uuid.NewV4()
+	callerReference := newUUID.String()
 
 	operationKey := newOpKey("PRV")
 	respOpKey := osb.OperationKey(operationKey)
@@ -187,6 +194,7 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 	return &response, nil
 }
 
+// Deprovision starts the de-provisioning process
 func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.RequestContext) (*broker.DeprovisionResponse, error) {
 	b.Lock()
 	defer b.Unlock()
@@ -226,6 +234,7 @@ func (b *BusinessLogic) Deprovision(request *osb.DeprovisionRequest, c *broker.R
 	return &response, nil
 }
 
+// LastOperation return status of last operation for requested operation key
 func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *broker.RequestContext) (*broker.LastOperationResponse, error) {
 	b.Lock()
 	defer b.Unlock()
@@ -257,10 +266,10 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 
 	if err != nil {
 		return nil, BadRequestError(err.Error())
-	} else {
-		if !found {
-			return nil, BadRequestError("instance not found")
-		}
+	}
+
+	if !found {
+		return nil, BadRequestError("instance not found")
 	}
 
 	state, err := b.service.CheckLastOperation(distributionID)
@@ -276,14 +285,17 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 	return response, nil
 }
 
+// Bind is not used
 func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext) (*broker.BindResponse, error) {
 	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
 }
 
+// Unbind is not used
 func (b *BusinessLogic) Unbind(request *osb.UnbindRequest, c *broker.RequestContext) (*broker.UnbindResponse, error) {
 	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
 }
 
+// Update is not used
 func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.RequestContext) (*broker.UpdateInstanceResponse, error) {
 	// Your logic for updating a service goes here.
 	response := broker.UpdateInstanceResponse{}
@@ -294,15 +306,35 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 	return &response, nil
 }
 
+// ValidateBrokerAPIVersion verifies the client OSB version with support OSB versions
 func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
-	// TODO valid OSB api version 2.13+
+	c, err := semver.NewConstraint(">=" + OSBVersion)
+	if err != nil {
+		return errors.New("invalid internal version")
+	}
+
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		msg := fmt.Sprintf("invalid received version: %s", version)
+		return errors.New(msg)
+	}
+
+	a := c.Check(v)
+
+	if !a {
+		msg := fmt.Sprintf("unsupported version: %s < %s", version, OSBVersion)
+		return errors.New(msg)
+	}
+
 	return nil
 }
 
+// RunTasksInBackground starts the background processing
 func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) {
 	b.service.RunTasks()
 }
 
+// GetInstance returns information about an instance
 func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
 
 	if instanceID == "" {

@@ -1,8 +1,5 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project: cloudfront-broker
-
-// Package that interacts with AWS for managing the cloudrfront distributions and associate services.
+// Package service
+// Package interacts with AWS for managing the cloudfront distributions and associate services.
 // The package requires these environmental variables:
 //    NAME_PREFIX - prefix for S3 buckets, IAM usernames, ... This is to make unique names
 //    REGION - region to create S3 buckets
@@ -23,6 +20,7 @@ import (
 	"github.com/golang/glog"
 )
 
+// Init takes parameters to initialize service package
 func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64, maxRetries int64) (*AwsConfig, error) {
 	c := AwsConfig{
 		namePrefix: namePrefix,
