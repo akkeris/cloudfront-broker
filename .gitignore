@@ -14,5 +14,11 @@ test
 *.out
 
 .env
-
+*.env
 *.sav
+
+node_modules
+.remarkrc
+package-lock.json
+package.json
+.jira-prefix

@@ -15,11 +15,10 @@ jobs:
       - run:
           name: Run tests
           environment:
-            DATABASE_URL: postgres://root:root@localhost:5432/test\?sslmode=disable
+            DATABASE_URL: postgres://root:root@localhost:5432/test?sslmode=disable
             NAME_PREFIX:  testit
             REGION:       us-west-2
             WAIT_SECONDS: 30
-            GO111MODULE: on
           command: |
             apk update --no-progress -q
             apk add openssl ca-certificates git make build-base nodejs npm docker --no-progress -q
@@ -35,6 +34,8 @@ jobs:
             make image
       - deploy:
           name: Push application Docker image
+          environment:
+            RELEASE: 0.1
           command: |
             if [ "${CIRCLE_BRANCH}" != "release" ]; then
               if [ "${CIRCLE_PROJECT_USERNAME}" == "akkeris" ]; then
@@ -42,10 +43,10 @@ jobs:
                 docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
                 docker push "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
                 if [ "${CIRCLE_BRANCH}" == "master" ]; then
-                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
-                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
-                  docker push "docker.io/akkeris/cloudfront-broker:latest"
-                  docker push "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
+                  #docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
+                  #docker push "docker.io/akkeris/cloudfront-broker:latest"
+                  docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
                 fi
               fi
             fi
