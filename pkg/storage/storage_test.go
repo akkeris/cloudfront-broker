@@ -1,6 +1,3 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project: cloudfront-broker
 package storage
 
 import (
@@ -16,7 +13,7 @@ import (
 )
 
 func TestDBInit(t *testing.T) {
-	dbUrl := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("DATABASE_URL")
 
 	Convey("Test initializing storage", t, func() {
 		Convey("without DATABASE_URL", func() {
@@ -34,7 +31,7 @@ func TestDBInit(t *testing.T) {
 		})
 
 		Reset(func() {
-			os.Setenv("DATABASE_URL", dbUrl)
+			os.Setenv("DATABASE_URL", dbURL)
 		})
 	})
 }
@@ -131,7 +128,7 @@ func TestStorage(t *testing.T) {
 						So(err, ShouldBeNil)
 						So(dist, ShouldNotBeNil)
 						So(dist.CloudfrontID.String, ShouldEqual, cloudfrontID)
-						So(dist.CloudfrontUrl.String, ShouldEqual, cloudfrontURL)
+						So(dist.CloudfrontURL.String, ShouldEqual, cloudfrontURL)
 
 						Convey("update with origin access identity", func() {
 							err := stg.UpdateDistributionWIthOriginAccessIdentity(distributionID, originAccessIdentity)
@@ -213,7 +210,7 @@ func TestStorage(t *testing.T) {
 			})
 
 			Convey("update task action", func() {
-				var newAction string = "is-distribution-deployed"
+				var newAction = "is-distribution-deployed"
 				task := &Task{
 					TaskID:         taskID,
 					DistributionID: distributionID,

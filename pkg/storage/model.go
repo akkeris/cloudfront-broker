@@ -1,6 +1,3 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project:
 package storage
 
 import (
@@ -10,6 +7,7 @@ import (
 	"github.com/lib/pq"
 )
 
+// Service is the OSB Services table
 type Service struct {
 	ServiceID   string
 	Name        string
@@ -24,6 +22,7 @@ type Service struct {
 	DeletedAt   pq.NullTime
 }
 
+// Plan is the OSB plans table
 type Plan struct {
 	PlanID      string
 	ServiceID   string
@@ -41,11 +40,12 @@ type Plan struct {
 	DeletedAt   pq.NullTime
 }
 
+// Distribution is the distributions table
 type Distribution struct {
 	DistributionID       string
 	PlanID               string
 	CloudfrontID         sql.NullString
-	CloudfrontUrl        sql.NullString
+	CloudfrontURL        sql.NullString
 	OriginAccessIdentity sql.NullString
 	Claimed              bool
 	BillingCode          sql.NullString
@@ -59,11 +59,12 @@ type Distribution struct {
 	Task    *[]Task
 }
 
+// Origin is the origins table
 type Origin struct {
 	OriginID       string
 	DistributionID string
 	BucketName     string
-	BucketUrl      string
+	BucketURL      string
 	OriginPath     string
 	IAMUser        sql.NullString
 	AccessKey      sql.NullString
@@ -75,6 +76,7 @@ type Origin struct {
 	DeletedAt      pq.NullTime
 }
 
+// Task is the tasks table
 type Task struct {
 	TaskID         string
 	DistributionID string

@@ -3,6 +3,7 @@ module cloudfront-broker
 go 1.12
 
 require (
+	github.com/Masterminds/semver v1.4.2
 	github.com/aws/aws-sdk-go v1.19.48
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gorilla/mux v1.7.2

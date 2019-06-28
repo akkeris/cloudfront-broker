@@ -1,6 +1,3 @@
-// Author: ned.hanks
-// Date Created: ned.hanks
-// Project:
 package service
 
 import (
@@ -19,6 +16,7 @@ import (
 
 const ttl int64 = 2592000
 
+// IsDuplicateInstance checks if distribution id already created
 func (s *AwsConfig) IsDuplicateInstance(distributionID string) (bool, error) {
 	glog.Info(" ===== IsDuplicateInstance =====")
 
@@ -27,14 +25,15 @@ func (s *AwsConfig) IsDuplicateInstance(distributionID string) (bool, error) {
 	if err != nil {
 		if err.Error() == "DistributionNotFound" {
 			return false, nil
-		} else {
-			return false, err
 		}
+
+		return false, err
 	}
 
 	return true, err
 }
 
+// IsDeployedInstance checks if distribution has been fully deployed
 func (s *AwsConfig) IsDeployedInstance(distributionID string) (bool, error) {
 	glog.Infof("===== IsDeployedInstance =====")
 
@@ -66,7 +65,7 @@ func (s *AwsConfig) getCloudfrontInstance(distributionID string) (*cloudFrontIns
 		billingCode:          s.stg.NullString(distribution.BillingCode),
 		planID:               &distribution.PlanID,
 		cloudfrontID:         s.stg.NullString(distribution.CloudfrontID),
-		cloudfrontURL:        s.stg.NullString(distribution.CloudfrontUrl),
+		cloudfrontURL:        s.stg.NullString(distribution.CloudfrontURL),
 		originAccessIdentity: s.stg.NullString(distribution.OriginAccessIdentity),
 		callerReference:      &distribution.CallerReference,
 	}
@@ -77,7 +76,7 @@ func (s *AwsConfig) getCloudfrontInstance(distributionID string) (*cloudFrontIns
 		cf.s3Bucket = &s3Bucket{
 			originID:   &origin.OriginID,
 			bucketName: &origin.BucketName,
-			bucketURI:  &origin.BucketUrl,
+			bucketURI:  &origin.BucketURL,
 			iAMUser: &iAMUser{
 				userName:  &origin.IAMUser.String,
 				accessKey: &origin.AccessKey.String,
@@ -89,6 +88,7 @@ func (s *AwsConfig) getCloudfrontInstance(distributionID string) (*cloudFrontIns
 	return cf, nil
 }
 
+// GetCloudFrontInstanceSpec retrieves  instance spec from database
 func (s *AwsConfig) GetCloudFrontInstanceSpec(distributionID string) (*InstanceSpec, error) {
 	cf, err := s.getCloudfrontInstance(distributionID)
 
@@ -99,7 +99,7 @@ func (s *AwsConfig) GetCloudFrontInstanceSpec(distributionID string) (*InstanceS
 	}
 
 	cfi := &InstanceSpec{
-		CloudFrontUrl:      *cf.cloudfrontURL,
+		CloudFrontURL:      *cf.cloudfrontURL,
 		BucketName:         *cf.s3Bucket.bucketName,
 		AwsAccessKey:       *cf.s3Bucket.iAMUser.accessKey,
 		AwsSecretAccessKey: *cf.s3Bucket.iAMUser.secretKey,
@@ -108,13 +108,14 @@ func (s *AwsConfig) GetCloudFrontInstanceSpec(distributionID string) (*InstanceS
 	return cfi, nil
 }
 
+// CreateCloudFrontDistribution starts the provision process by creating a new task
 func (s *AwsConfig) CreateCloudFrontDistribution(distributionID string, callerReference string, operationKey string, serviceID string, planID string, billingCode string) error {
 	cf := &cloudFrontInstance{
 		callerReference: aws.String(callerReference),
 		distributionID:  aws.String(distributionID),
 		billingCode:     aws.String(billingCode),
 		planID:          aws.String(planID),
-		serviceId:       aws.String(serviceID),
+		serviceID:       aws.String(serviceID),
 		operationKey:    aws.String(operationKey),
 	}
 
@@ -248,6 +249,7 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 	return nil
 }
 
+// DeleteCloudFrontDistribution starts the de-provision process my creating a new task
 func (s *AwsConfig) DeleteCloudFrontDistribution(distributionID string, operationKey string) error {
 
 	cf := &cloudFrontInstance{
@@ -548,6 +550,7 @@ func (s *AwsConfig) deleteOriginAccessIdentity(cf *cloudFrontInstance) error {
 	return nil
 }
 
+// CheckLastOperation retrieves state from database
 func (s *AwsConfig) CheckLastOperation(distributionID string) (*osb.LastOperationResponse, error) {
 	glog.Infof("===== CheckLastOperation [%s] =====", distributionID)
 
