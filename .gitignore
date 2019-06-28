@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+cloudfront-broker
 
 # Test binary, build with `go test -c`
 *.test
