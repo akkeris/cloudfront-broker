@@ -7,6 +7,8 @@
 
 # Test binary, build with `go test -c`
 *.test
+cloudfront-broker
+
 
 test
 
@@ -16,3 +18,10 @@ test
 .env
 
 *.sav
+
+node_modules
+.remarkrc
+package-lock.json
+package.json
+.jira-prefix
+.vscode
