@@ -13,10 +13,25 @@ SRC=*.go pkg/*/*
 SRCDIR=pkg/boker pkg/storage pkg/service
 PKG=$(NAME)/pkg/broker $(NAME)/pkg/storage $(NAME)/pkg/service
 
+VERSION=0.1
+GIT_COMMIT := $(shell git rev-parse HEAD)
+GO_VERSION := $(shell go version | sed 's/^go version go\(\([0-9]*\.[0-9]*\)*\).*$$/\1/')
+BUILT := $(shell date +"%F-%I:%M:%S%z")
+OSB_VERSION=2.13
+
+BUILD_ARGS=--build-arg VERSION=$(VERSION) --build-arg OSB_VERSION=$(OSB_VERSION)
+
+LDFLAGS= -ldflags "-s -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.GoVersion=$(GO_VERSION) -X main.Built=$(BUILT) -X main.OSBVersion=$(OSB_VERSION)"
+
 build: $(NAME) ## Builds the cloudfront-broker
 
 $(NAME): $(SRC)
-	go build -i  -o $(NAME) .
+	@echo VERSION="$(VERSION)"
+	@echo GIT_COMMIT=$(GIT_COMMIT)
+	@echo GO_VERSION="$(GO_VERSION)"
+	@echo BUILT=$(BUILT)
+	@echo OSB_VERSION=$(OSB_VERSION)
+	go build -i $(LDFLAGS) -o $(NAME) .
 
 test: ## Runs the tests
 	go get github.com/smartystreets/goconvey
@@ -30,18 +45,15 @@ linux: $(NAME)-linux ## Builds a Linux executable
 
 $(NAME)-linux: $(SRC) ## Builds a Linux executable
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-	go build -o $(NAME)-linux --ldflags="-s" $(NAME).go
+	go build $(BUILD_ARGS) -o $(NAME)-linux $(LDFLAGS) $(NAME).go
 
-image: linux ## Builds a Linux based docker image
-	mv $(NAME)-linux $(NAME)
-	docker build -t "$(IMAGE)" .
-	rm $(NAME)
+image:  ## Builds a Linux based docker image
+	docker build $(BUILD_ARGS) -t "$(IMAGE)" .
 
 clean: ## Cleans up build artifacts
 	rm -f $(NAME)
 	rm -f $(NAME)-linux
 	rm -f cover.out
-	#go clean --cache
 
 tag: image
 	docker tag $(IMAGE) $(REPO)/$(IMAGE):$(TAG)
@@ -66,4 +78,4 @@ help: ## Shows the help
         awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ''
 
-.PHONY: build test linux image clean push deploy-helm help
+.PHONY: build test docker linux image clean push deploy-helm help

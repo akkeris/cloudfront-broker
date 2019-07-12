@@ -14,8 +14,12 @@ require (
 	github.com/pmorie/go-open-service-broker-client v0.0.0-20180330214919-dca737037ce6
 	github.com/pmorie/osb-broker-lib v0.0.0-20180423023500-052cd99aa13d
 	github.com/prometheus/client_golang v0.9.4
-	github.com/schrej/godacov v0.0.0-20190125092634-4fb4590e84a1 // indirect
 	github.com/shawn-hurley/osb-broker-k8s-lib v0.0.0-20180430125558-bed19ac36ffe
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a
+	github.com/spf13/pflag v1.0.3 // indirect
+	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
+	golang.org/x/net v0.0.0-20190628185345-da137c7871d7 // indirect
+	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7 // indirect
+	golang.org/x/text v0.3.2 // indirect
 	k8s.io/client-go v0.0.0-20190602130007-e65ca70987a6
 )

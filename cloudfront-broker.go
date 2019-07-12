@@ -35,10 +35,19 @@ var options struct {
 	TLSKeyFile           string
 	AuthenticateK8SToken bool
 	KubeConfig           string
+	Version              bool
 }
 
+// Variables used to output version and build time information
+var (
+	Version    string
+	GitCommit  string
+	GoVersion  string
+	Built      string
+	OSBVersion string
+)
+
 func init() {
-	fmt.Println(">>>>> init <<<<<")
 	flag.IntVar(&options.Port, "port", 5443, "use '--port' option to specify the port for broker to listen on")
 	flag.BoolVar(&options.Insecure, "insecure", false, "use --insecure to use HTTP vs HTTPS.")
 	flag.StringVar(&options.TLSCertFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert).")
@@ -47,17 +56,24 @@ func init() {
 	flag.StringVar(&options.TLSKey, "tlsKey", "", "base-64 encoded PEM block to use as the private key matching the TLS certificate.")
 	flag.BoolVar(&options.AuthenticateK8SToken, "authenticate-k8s-token", false, "option to specify if the broker should validate the bearer auth token with kubernetes")
 	flag.StringVar(&options.KubeConfig, "kube-config", "", "specify the kube config path to be used")
+	flag.BoolVar(&options.Version, "version", false, "output version information and exit")
 
 	// glog to stderr
 	flag.Set("logtostderr", "true")
 
 	broker.AddFlags(&options.Options)
 	flag.Parse()
-	// fmt.Printf("options: %+v\n", options)
 }
 
 func main() {
-	if err := run(); err != nil && err != context.Canceled && err != context.DeadlineExceeded {
+	if options.Version {
+		fmt.Println("CloudFront Broker")
+		fmt.Printf(" %-30s %s\n", "Version:", Version)
+		fmt.Printf(" %-30s %s\n", "Git Commit:", GitCommit)
+		fmt.Printf(" %-30s %s\n", "Go Version:", GoVersion)
+		fmt.Printf(" %-30s %s\n", "Built:", Built)
+		fmt.Printf(" %-30s %s\n", "Open Service Broker Version:", OSBVersion)
+	} else if err := run(); err != nil && err != context.Canceled && err != context.DeadlineExceeded {
 		glog.Fatalln(err)
 	}
 }
