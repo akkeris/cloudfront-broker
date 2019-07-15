@@ -19,7 +19,9 @@ GO_VERSION := $(shell go version | sed 's/^go version go\(\([0-9]*\.[0-9]*\)*\).
 BUILT := $(shell date +"%F-%I:%M:%S%z")
 OSB_VERSION=2.13
 
-BUILD_ARGS=--build-arg VERSION=$(VERSION) --build-arg OSB_VERSION=$(OSB_VERSION)
+BUILD_NO=alpha
+
+BUILD_ARGS=--build-arg VERSION=$(VERSION) --build-arg OSB_VERSION=$(OSB_VERSION) --build-arg BUILD_NO=$(BUILD_NO)
 
 LDFLAGS= -ldflags "-s -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.GoVersion=$(GO_VERSION) -X main.Built=$(BUILT) -X main.OSBVersion=$(OSB_VERSION)"
 
@@ -47,7 +49,7 @@ $(NAME)-linux: $(SRC) ## Builds a Linux executable
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
 	go build $(BUILD_ARGS) -o $(NAME)-linux $(LDFLAGS) $(NAME).go
 
-image:  ## Builds a Linux based docker image
+image:  ## Builds a docker image (AlpineOS)
 	docker build $(BUILD_ARGS) -t "$(IMAGE)" .
 
 clean: ## Cleans up build artifacts
