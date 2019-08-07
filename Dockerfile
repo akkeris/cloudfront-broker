@@ -53,7 +53,7 @@ WORKDIR /app
 
 COPY --from=builder /go/src/github.com/akkeris/${NAME}/${NAME} /app/${NAME}
 COPY start.sh .
-COPY start-background.sh .
+COPY start-tasks.sh .
 
 CMD /app/${NAME} -insecure -logtostderr=1 -stderrthreshold 0
 
