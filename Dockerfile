@@ -55,5 +55,5 @@ COPY --from=builder /go/src/github.com/akkeris/${NAME}/${NAME} /app/${NAME}
 COPY start.sh .
 COPY start-tasks.sh .
 
-CMD /app/${NAME} -insecure -logtostderr=1 -stderrthreshold 0
-
+#CMD /app/${NAME} -insecure -logtostderr=1 -stderrthreshold 0
+cmd /app/start.sh
