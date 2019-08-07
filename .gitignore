@@ -8,6 +8,8 @@
 
 # Test binary, build with `go test -c`
 *.test
+cloudfront-broker
+
 
 test
 cloudfront-broker
@@ -26,3 +28,4 @@ package-lock.json
 package.json
 .jira-prefix
 cloudfront-broker-configmap.yaml
+.vscode
