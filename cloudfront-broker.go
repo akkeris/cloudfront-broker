@@ -112,8 +112,9 @@ func runWithContext(ctx context.Context) error {
 	}
 
 	if options.BackgroundTasksOnly {
-		businessLogic.RunTasksInBackground(ctx)
-		return nil
+		glog.Info("Starting background tasks")
+		return businessLogic.RunTasksInBackground(ctx)
+		// This should never return
 	}
 
 	addr := ":" + port
@@ -150,9 +151,6 @@ func runWithContext(ctx context.Context) error {
 		// Use TokenReviewMiddleware.
 		s.Router.Use(tr.Middleware)
 	}
-
-	glog.Info("Starting background tasks")
-	go businessLogic.RunTasksInBackground(ctx)
 
 	glog.Infof("Starting broker!")
 

@@ -537,28 +537,46 @@ var actions = map[string]func(*AwsConfig, *storage.Task, *cloudFrontInstance) (*
 // RunTasks is a go routine to run the actions in correct order.
 // It will wait for AWS service to be available before going to next service
 // Task status is in the tasks database table, so is safe to restart.
-func (svc *AwsConfig) RunTasks() {
-	ticker := time.NewTicker(time.Second * time.Duration(svc.waitSecs))
+func (svc *AwsConfig) RunTasks() error {
+	var err error
+
+	waitDur := time.Duration(time.Second * time.Duration(svc.waitSecs))
+
+	fmt.Printf("RunTask: waitdur %v\n", waitDur)
+
+	// ticker := time.NewTicker(time.Second * time.Duration(svc.waitSecs))
 
 	glog.Info("===== RunTasks =====")
 	for {
-		var err error
 		var cf *cloudFrontInstance
 		var curTask *storage.Task
 
-		<-ticker.C
+		// <-ticker.C
 
 		curTask, err = svc.stg.PopNextTask()
 
 		if err != nil {
 			if err == sql.ErrNoRows {
 				glog.Error("RunTasks: no tasks")
+				// <-ticker.C
+				time.Sleep(waitDur)
 				continue
 			} else {
 				msg := fmt.Sprintf("RunTask: error popping next task: %s", err.Error())
 				glog.Error(msg)
 				continue
 			}
+		}
+
+		taskDur := time.Now().Sub(curTask.UpdatedAt)
+
+		msg := fmt.Sprintf("RunTask: %s: %v < %v", curTask.TaskID, taskDur, waitDur)
+		glog.Info(msg)
+
+		if taskDur < waitDur {
+			// <-ticker.C
+			time.Sleep(time.Duration(time.Second))
+			continue
 		}
 
 		cf, err = svc.getCloudfrontInstance(curTask.DistributionID)
@@ -583,4 +601,6 @@ func (svc *AwsConfig) RunTasks() {
 			glog.Error(msg)
 		}
 	}
+
+	return err
 }

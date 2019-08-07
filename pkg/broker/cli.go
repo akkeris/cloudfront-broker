@@ -27,5 +27,5 @@ func AddFlags(o *Options) {
 	flag.StringVar(&o.NamePrefix, "name-prefix", "", "Prefix for S3 bucket name, can also be set with NAME_PREFIX environment var.")
 	flag.Int64Var(&o.WaitSecs, "wait-seconds", 15, "Seconds to wait between aws operations checks, can also be set with WAIT_SECONDS environment var.")
 	flag.Int64Var(&o.MaxRetries, "max-retries", 100, "Number of checks for a service to complete before giving an error")
-	flag.BoolVar(&o.BackgroundTasksOnly, "background-tasks", false, "run background tasks only")
+	flag.BoolVar(&o.BackgroundTasksOnly, "tasks", false, "run tasks")
 }

@@ -139,7 +139,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		},
 	})
 
-	// glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
+	glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
 	svc := s3.New(s.sess)
 	if svc == nil {
 		msg := "error getting s3 session"

@@ -330,8 +330,8 @@ func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
 }
 
 // RunTasksInBackground starts the background processing
-func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) {
-	b.service.RunTasks()
+func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) error {
+	return b.service.RunTasks()
 }
 
 // GetInstance returns information about an instance
@@ -345,6 +345,8 @@ func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, c
 	if err != nil {
 		if err.Error() == "DistributionNotDeployed" {
 			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		} else if err.Error() == "DistributionNotFound" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotFound", "instance not found")
 		}
 	}
 	if !deployed {

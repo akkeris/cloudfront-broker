@@ -323,17 +323,12 @@ const selectTaskScript string = `
 `
 
 const popNextTaskScript string = `
-  update tasks set
-    status = $1,
-    updated_at = now() 
-  where task_id in ( 
-    select task_id
+    select task_id, distribution_id, operation_key, status, action, retries, metadata, result, started_at, updated_at
     from tasks 
     where status in ('new', 'pending') 
     and deleted_at is null 
     and finished_at is null 
-    order by updated_at asc limit 1 )
-  returning task_id, distribution_id, operation_key, status, action, retries, metadata, result, started_at, updated_at
+    order by random() limit 1
 `
 
 const updateTaskActionScript string = `

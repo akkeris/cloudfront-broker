@@ -55,7 +55,7 @@ func (p *PostgresStorage) PopNextTask() (*Task, error) {
 	var task Task
 
 	glog.Info("===== PopNextTask =====")
-	err = p.db.QueryRow(popNextTaskScript, StatusPending).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result, &task.StartedAt, &task.UpdatedAt)
+	err = p.db.QueryRow(popNextTaskScript).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result, &task.StartedAt, &task.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
