@@ -537,21 +537,15 @@ var actions = map[string]func(*AwsConfig, *storage.Task, *cloudFrontInstance) (*
 // RunTasks is a go routine to run the actions in correct order.
 // It will wait for AWS service to be available before going to next service
 // Task status is in the tasks database table, so is safe to restart.
-func (svc *AwsConfig) RunTasks() error {
+func (svc *AwsConfig) RunTasks() {
 	var err error
 
 	waitDur := time.Duration(time.Second * time.Duration(svc.waitSecs))
-
-	fmt.Printf("RunTask: waitdur %v\n", waitDur)
-
-	// ticker := time.NewTicker(time.Second * time.Duration(svc.waitSecs))
 
 	glog.Info("===== RunTasks =====")
 	for {
 		var cf *cloudFrontInstance
 		var curTask *storage.Task
-
-		// <-ticker.C
 
 		curTask, err = svc.stg.PopNextTask()
 
@@ -574,7 +568,6 @@ func (svc *AwsConfig) RunTasks() error {
 		glog.Info(msg)
 
 		if taskDur < waitDur {
-			// <-ticker.C
 			time.Sleep(time.Duration(time.Second))
 			continue
 		}
@@ -601,6 +594,4 @@ func (svc *AwsConfig) RunTasks() error {
 			glog.Error(msg)
 		}
 	}
-
-	return err
 }
