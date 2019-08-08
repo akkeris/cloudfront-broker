@@ -172,9 +172,11 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		}
 	}
 
-	if billingCode == "" {
-		return nil, UnprocessableEntityWithMessage("BillingCodeRequired", "The billing code was not provided.")
-	}
+	/*
+		if billingCode == "" {
+			return nil, UnprocessableEntityWithMessage("BillingCodeRequired", "The billing code was not provided.")
+		}
+	*/
 
 	ok, err := b.service.IsDuplicateInstance(distributionID)
 
@@ -331,7 +333,8 @@ func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
 
 // RunTasksInBackground starts the background processing
 func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) error {
-	return b.service.RunTasks()
+	b.service.RunTasks()
+	// This should never return
 }
 
 // GetInstance returns information about an instance
