@@ -335,6 +335,7 @@ func (b *BusinessLogic) ValidateBrokerAPIVersion(version string) error {
 func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) error {
 	b.service.RunTasks()
 	// This should never return
+	return errors.New("system error")
 }
 
 // GetInstance returns information about an instance
