@@ -15,7 +15,7 @@ require (
 	github.com/pmorie/osb-broker-lib v0.0.0-20180423023500-052cd99aa13d
 	github.com/prometheus/client_golang v0.9.4
 	github.com/shawn-hurley/osb-broker-k8s-lib v0.0.0-20180430125558-bed19ac36ffe
-	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a
+	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337
 	github.com/spf13/pflag v1.0.3 // indirect
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
 	golang.org/x/net v0.0.0-20190628185345-da137c7871d7 // indirect

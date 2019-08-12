@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -101,8 +101,20 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	return stg, namePrefix, waitSecs, maxRetries, err
 }
 
-// GetCatalog returns an  OSB catalog retreived from the DB
 func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {
+
+	catalog, err := ioutil.ReadFile("./catalog.json")
+
+	if err != nil {
+		return nil, errors.New("GetCatalog: Unable to open catalog json file")
+	}
+
+	return catalog, nil
+}
+
+// GetCatalog returns an  OSB catalog retreived from the DB
+/*
+	func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {
 	var err error
 
 	response := &broker.CatalogResponse{}
@@ -123,6 +135,7 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 
 	return response, nil
 }
+*/
 
 // Provision starts the provisioning process
 func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.RequestContext) (*broker.ProvisionResponse, error) {

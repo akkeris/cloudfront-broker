@@ -47,6 +47,10 @@ func (s *AwsConfig) IsDeployedInstance(distributionID string) (bool, error) {
 		return true, nil
 	}
 
+	if dist.Status == statusDeleted {
+		return false, errors.New("DistributionDeleted")
+	}
+
 	return false, errors.New("DistributionNotDeployed")
 }
 

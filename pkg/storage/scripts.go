@@ -95,7 +95,7 @@ DO
         free        boolean                                 NOT NULL DEFAULT FALSE,
         cost_cents  cents                                   NOT NULL DEFAULT 1000,
         cost_unit   costunit                                NOT NULL DEFAULT 'month',
-        attributes  json                                    NOT NULL DEFAULT '{}',
+        schemas     json                                    NOT NULL DEFAULT '{}',
 
         beta        boolean                                 NOT NULL DEFAULT FALSE,
         depreciated boolean                                 NOT NULL DEFAULT FALSE,
@@ -218,7 +218,8 @@ const initPlansScript string = `
     'dist',
     'Cloudfront Distribution',
     'Create/Update a Cloudfront Distribution',
-    'cloudfront, cdn');
+    'cloudfront, cdn'
+		'');
 `
 
 const checkPlanScript string = `

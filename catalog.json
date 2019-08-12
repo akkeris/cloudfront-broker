@@ -1,0 +1,81 @@
+{
+  "services": [
+    {
+      "id": "3b8d2e75-ca9f-463f-84e4-4b85513f1bc8",
+      "name": "cloudfront",
+      "description": "Cloudfront Distributions",
+      "tags": [
+        "Cloudfront Distribution",
+        "CDN"
+      ],
+      "bindable": false,
+      "instances_retrievable": true,
+      "bindings_retrievable": true,
+      "plan_updateable": true,
+      "metadata": {
+        "displayName": "Akkeris Cloudfront",
+        "provider": {
+          "name": "Amazon Web Services"
+        }
+      },
+      "plans": [
+        {
+          "id": "5eac120c-5303-4f55-8a62-46cde1b52d0b",
+          "name": "distribution",
+          "description": "Create/Update a Cloudfront Distribution",
+          "free": false,
+          "metadata": {
+            "humanName": "Akkeris Cloudfront Distribution",
+            "catagories": "cloudfront, cdn",
+            "price": {
+              "cents": 10000,
+              "unit": "month"
+            }
+          },
+          "schemas": {
+            "service_instance": {
+              "create": {
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-04/schema#",
+                  "type": "object",
+                  "properties": {
+                    "billing-code": {
+                      "description": "Billing account code used for invoicing",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "update": {
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-04/schema#",
+                  "type": "object",
+                  "properties": {
+                    "billing-code": {
+                      "description": "Billing account code used for invoicing",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "service_binding": {
+              "create": {
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-04/schema#",
+                  "type": "object",
+                  "properties": {
+                    "billing-code": {
+                      "description": "Billing account code used for invoicing",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
