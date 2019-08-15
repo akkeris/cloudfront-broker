@@ -109,7 +109,7 @@ func TestStorage(t *testing.T) {
 
 	Convey("distributions", t, func() {
 		Convey("new distribution", func() {
-			err := stg.NewDistribution(distributionID, planID, billingCode, callerReference, status)
+			err := stg.NewDistribution(distributionID, planID, &billingCode, callerReference, status)
 			So(err, ShouldBeNil)
 
 			Convey("get distribution", func() {
@@ -143,7 +143,7 @@ func TestStorage(t *testing.T) {
 
 	Convey("origins", t, func() {
 		Convey("insert new origin", func() {
-			origin, err := stg.AddOrigin(distributionID, bucketName, bucketURL, originPath, billingCode)
+			origin, err := stg.AddOrigin(distributionID, bucketName, bucketURL, originPath)
 
 			So(err, ShouldBeNil)
 			So(origin.OriginID, ShouldNotBeBlank)

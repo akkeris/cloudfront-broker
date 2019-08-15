@@ -109,14 +109,14 @@ func (s *AwsConfig) GetCloudFrontInstanceSpec(distributionID string) (*InstanceS
 }
 
 // CreateCloudFrontDistribution starts the provision process by creating a new task
-func (s *AwsConfig) CreateCloudFrontDistribution(distributionID string, callerReference string, operationKey string, serviceID string, planID string, billingCode string) error {
+func (s *AwsConfig) CreateCloudFrontDistribution(distributionID string, callerReference string, operationKey string, serviceID string, planID string, billingCode *string) error {
 	cf := &cloudFrontInstance{
 		callerReference: aws.String(callerReference),
 		distributionID:  aws.String(distributionID),
-		billingCode:     aws.String(billingCode),
 		planID:          aws.String(planID),
 		serviceID:       aws.String(serviceID),
 		operationKey:    aws.String(operationKey),
+		billingCode:     billingCode,
 	}
 
 	err := s.ActionCreateNew(cf)
@@ -172,10 +172,13 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 	cmi = append(cmi, aws.String("HEAD"))
 
 	tags := []*cloudfront.Tag{}
-	tags = append(tags, &cloudfront.Tag{
-		Key:   aws.String("billingcode"),
-		Value: (cf.billingCode),
-	})
+
+	if cf.billingCode != nil {
+		tags = append(tags, &cloudfront.Tag{
+			Key:   aws.String("billingcode"),
+			Value: cf.billingCode,
+		})
+	}
 
 	cin := &cloudfront.CreateDistributionWithTagsInput{
 		DistributionConfigWithTags: &cloudfront.DistributionConfigWithTags{

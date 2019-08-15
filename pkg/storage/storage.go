@@ -59,13 +59,25 @@ func nullStringValue(ns sql.NullString) string {
 
 // NullString returns string from db null string field
 func (p *PostgresStorage) NullString(ns sql.NullString) *string {
-	var r string
+	var r *string
 
-	r = nullStringValue(ns)
-	return &r
+	if ns.Valid {
+		r = &ns.String
+	}
+
+	return r
 }
 
 // SetNullString sets the struct members for a sql null string based on passed in string
+// TODO: change SetNulLString to accept string pointer and refactor all usages
+func SetNullStringPtr(s *string) sql.NullString {
+	if s == nil {
+		return SetNullString("")
+	}
+
+	return SetNullString(*s)
+}
+
 func SetNullString(s string) sql.NullString {
 	ns := sql.NullString{}
 
@@ -164,12 +176,34 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 		var planID, name, costUnit string
 		var humanName, description, catagories sql.NullString
 		var cents int32
-		var free, beta, depreciated bool
+		var free bool
 
-		err := rows.Scan(&planID, &name, &name, &humanName, &description, &catagories, &free, &cents, &costUnit, &beta, &depreciated)
+		err := rows.Scan(&planID, &name, &name, &humanName, &description, &catagories, &free, &cents, &costUnit)
 		if err != nil {
 			glog.Errorf("Scan from plans query failed: %s\n", err.Error())
 			return nil, errors.New("Scan from plans query failed: " + err.Error())
+		}
+
+		parameters := map[string]interface{}{
+			"$schema": "http://json-schema.org/draft-04/schema#",
+			"type":    "object",
+			"properties": map[string]interface{}{
+				"billingcode": map[string]interface{}{
+					"description": "Billing code used for invoicing",
+					"type":        "string",
+				},
+			},
+		}
+
+		schemas := osb.Schemas{
+			ServiceInstance: &osb.ServiceInstanceSchema{
+				Create: &osb.InputParametersSchema{
+					Parameters: parameters,
+				},
+				Update: &osb.InputParametersSchema{
+					Parameters: parameters,
+				},
+			},
 		}
 
 		plans = append(plans, osb.Plan{
@@ -178,13 +212,12 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 			Description: nullStringValue(description),
 			Free:        &free,
 			Metadata: map[string]interface{}{
-				"humanName":   nullStringValue(humanName),
-				"cents":       cents,
-				"cost_unit":   costUnit,
-				"beta":        beta,
-				"depreciated": depreciated,
-				"catagories":  nullStringValue(catagories),
+				"humanName":  nullStringValue(humanName),
+				"cents":      cents,
+				"cost_unit":  costUnit,
+				"catagories": nullStringValue(catagories),
 			},
+			Schemas: &schemas,
 		})
 	}
 
@@ -208,9 +241,8 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 	for rows.Next() {
 		var serviceID, serviceName string
 		var serviceDescription, serviceHumanName, serviceCatagories, serviceImage sql.NullString
-		var beta, deprecated bool
 
-		err = rows.Scan(&serviceID, &serviceName, &serviceHumanName, &serviceDescription, &serviceCatagories, &serviceImage, &beta, &deprecated)
+		err = rows.Scan(&serviceID, &serviceName, &serviceHumanName, &serviceDescription, &serviceCatagories, &serviceImage)
 		if err != nil {
 			glog.Errorf("Unable to get services: %s\n", err.Error())
 			return nil, errors.New("Unable to scan services: " + err.Error())
@@ -318,9 +350,11 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 }
 
 // NewDistribution inserts distribution
-func (p *PostgresStorage) NewDistribution(distributionID string, planID string, billingCode string, callerReference string, status string) error {
+func (p *PostgresStorage) NewDistribution(distributionID string, planID string, billingCode *string, callerReference string, status string) error {
 	var err error
 	var cnt int
+
+	billingCodeStr := SetNullStringPtr(billingCode)
 
 	err = p.db.QueryRow(checkPlanScript, planID).Scan(&cnt)
 
@@ -341,18 +375,11 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 	}
 
 	distribution := &Distribution{
-		PlanID: planID,
-		BillingCode: sql.NullString{
-			String: billingCode,
-			Valid:  true},
+		PlanID:      planID,
+		BillingCode: billingCodeStr,
 	}
 
-	insertDistScript := `insert into distributions
-    (distribution_id, plan_id, billing_code, caller_reference, status) 
-    values 
-    ($1, $2, $3, $4, $5) returning distribution_id;`
-
-	err = p.db.QueryRow(insertDistScript, distributionID, planID, billingCode, callerReference, status).Scan(&distribution.DistributionID)
+	err = p.db.QueryRow(insertDistScript, distributionID, planID, billingCodeStr, callerReference, status).Scan(&distribution.DistributionID)
 	if err != nil {
 		msg := fmt.Sprintf("NewDistribution: error inserting distribution: %s", err.Error())
 		glog.Error(msg)
@@ -439,7 +466,7 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 }
 
 // AddOrigin inserts origin into origins table
-func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bucketURL string, originPath string, billingCode string) (*Origin, error) {
+func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bucketURL string, originPath string) (*Origin, error) {
 	glog.Info("===== AddOrigin =====")
 
 	origin := &Origin{
@@ -447,11 +474,10 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 		BucketName:     bucketName,
 		BucketURL:      bucketURL,
 		OriginPath:     originPath,
-		BillingCode:    sql.NullString{String: billingCode, Valid: true},
 	}
 
 	err := p.db.QueryRow(insertOriginScript,
-		distributionID, bucketName, bucketURL, origin.BillingCode).Scan(&origin.OriginID)
+		distributionID, bucketName, bucketURL).Scan(&origin.OriginID)
 
 	if err != nil {
 		msg := fmt.Sprintf("AddOrigin: error inserting origin: %s", err.Error())

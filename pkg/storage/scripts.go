@@ -7,9 +7,7 @@ select
     human_name,
     description,
     categories,
-    image,
-    beta,
-    depreciated
+    image
 from services where deleted_at is null `
 
 const plansQuery string = `
@@ -22,9 +20,7 @@ select
     plans.categories,
     plans.free,
     plans.cost_cents,
-    plans.cost_unit,
-    plans.beta,
-    plans.depreciated
+    plans.cost_unit
 from plans join services on services.service_id = plans.service_id
 where services.deleted_at is null and plans.deleted_at is null
 `
@@ -67,9 +63,6 @@ DO
         categories  varchar(1024),
         image       varchar(1024),
 
-        beta        boolean                  NOT NULL DEFAULT FALSE,
-        depreciated boolean                  NOT NULL DEFAULT FALSE,
-
         created_at  timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
         updated_at  timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
         deleted_at  timestamp WITH TIME ZONE
@@ -95,11 +88,7 @@ DO
         free        boolean                                 NOT NULL DEFAULT FALSE,
         cost_cents  cents                                   NOT NULL DEFAULT 1000,
         cost_unit   costunit                                NOT NULL DEFAULT 'month',
-        attributes  json                                    NOT NULL DEFAULT '{}',
-
-        beta        boolean                                 NOT NULL DEFAULT FALSE,
-        depreciated boolean                                 NOT NULL DEFAULT FALSE,
-
+ 
         created_at  timestamp WITH TIME ZONE                NOT NULL DEFAULT now(),
         updated_at  timestamp WITH TIME ZONE                NOT NULL DEFAULT now(),
         deleted_at  timestamp WITH TIME ZONE
@@ -154,7 +143,6 @@ DO
         iam_user   alpha_numeric,
         access_key varchar(128),
         secret_key varchar(128),
-        billing_code varchar(128),
 
         created_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
         updated_at timestamp WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -201,24 +189,23 @@ DO
 `
 
 const initServicesScript string = `
-  INSERT INTO services (service_id, name, human_name, description, categories, beta, depreciated)
+  INSERT INTO services (service_id, name, human_name, description, categories)
   VALUES ('3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
-    'distribution',
+    'cloudfront',
     'Akkeris Cloudfront',
     'Create a Cloudfront Distribution',
-    'Cloudfront Distribution, CDN',
-    FALSE,
-    FALSE);
+    'Cloudfront Distribution,CDN');
 `
 
 const initPlansScript string = `
   INSERT INTO plans (plan_id, service_id, name, human_name, description, categories)
   VALUES ('5eac120c-5303-4f55-8a62-46cde1b52d0b',
     '3b8d2e75-ca9f-463f-84e4-4b85513f1bc8',
-    'dist',
-    'Cloudfront Distribution',
+    'distribution',
+    'Akkeris Cloudfront Distribution',
     'Create/Update a Cloudfront Distribution',
-    'cloudfront, cdn');
+    'cloudfront, cdn'
+);
 `
 
 const checkPlanScript string = `
@@ -244,6 +231,11 @@ const selectDistScript string = `
   from distributions
   where distribution_id = $1
 `
+
+const insertDistScript string = `insert into distributions
+    (distribution_id, plan_id, billing_code, caller_reference, status) 
+    values 
+    ($1, $2, $3, $4, $5) returning distribution_id;`
 
 const updateDistributionScript string = `
   update distributions
@@ -276,9 +268,9 @@ const updateDistWithOAIScript string = `
 
 const insertOriginScript string = `
 insert into origins
-  (origin_id, distribution_id, bucket_name, bucket_url, billing_code)
+  (origin_id, distribution_id, bucket_name, bucket_url)
 values 
-  (uuid_generate_v4(), $1, $2, $3, $4) returning origin_id;
+  (uuid_generate_v4(), $1, $2, $3) returning origin_id;
 `
 
 const selectOriginScript string = `

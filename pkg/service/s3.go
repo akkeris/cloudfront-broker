@@ -58,7 +58,7 @@ func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) error {
 		fullname:   aws.String(fullname),
 	}
 
-	origin, err := s.stg.AddOrigin(*cf.distributionID, *bucketName, *s3out.Location, "/", *cf.billingCode)
+	origin, err := s.stg.AddOrigin(*cf.distributionID, *bucketName, *s3out.Location, "/")
 
 	if err != nil {
 		msg := fmt.Sprintf("createS3Bucket: error adding origin: %s", err.Error())

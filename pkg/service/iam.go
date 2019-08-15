@@ -26,10 +26,13 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 	}
 
 	tags := []*iam.Tag{}
-	tags = append(tags, &iam.Tag{
-		Key:   aws.String("billingcode"),
-		Value: cf.billingCode,
-	})
+
+	if cf.billingCode != nil {
+		tags = append(tags, &iam.Tag{
+			Key:   aws.String("billingcode"),
+			Value: cf.billingCode,
+		})
+	}
 
 	iamIn = &iam.CreateUserInput{
 		UserName: cf.s3Bucket.bucketName,

@@ -15,8 +15,6 @@ type Service struct {
 	Description sql.NullString
 	Catagories  sql.NullString
 	Image       sql.NullString
-	Beta        bool
-	Deprecated  bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   pq.NullTime
@@ -33,8 +31,7 @@ type Plan struct {
 	Free        bool
 	CostCents   uint
 	CostUnit    string
-	Beta        bool
-	Depreciated bool
+	Parameters  sql.NullString
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   pq.NullTime
@@ -69,7 +66,6 @@ type Origin struct {
 	IAMUser        sql.NullString
 	AccessKey      sql.NullString
 	SecretKey      sql.NullString
-	BillingCode    sql.NullString
 	Etag           sql.NullString
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

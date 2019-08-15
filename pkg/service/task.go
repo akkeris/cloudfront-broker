@@ -143,7 +143,7 @@ func (svc *AwsConfig) getTaskState(distributionID string) (*osb.LastOperationRes
 func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 	glog.Infof("===== actionCreateNew [%s] =====", *cf.operationKey)
 
-	err := svc.stg.NewDistribution(*cf.distributionID, *cf.planID, *cf.billingCode, *cf.callerReference, statusPending)
+	err := svc.stg.NewDistribution(*cf.distributionID, *cf.planID, cf.billingCode, *cf.callerReference, statusPending)
 
 	if err != nil {
 		msg := fmt.Sprintf("actionCreateNew[%s]: error adding new distribution: %s", *cf.operationKey, err.Error())

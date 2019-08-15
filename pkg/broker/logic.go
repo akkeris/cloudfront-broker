@@ -126,7 +126,7 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 
 // Provision starts the provisioning process
 func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.RequestContext) (*broker.ProvisionResponse, error) {
-	var billingCode string
+	var billingCode *string
 
 	b.Lock()
 	defer b.Unlock()
@@ -166,17 +166,11 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		switch vv := v.(type) {
 		case string:
 			if k == "billing_code" {
-				billingCode = vv
+				billingCode = &vv
 				glog.Info(k, " is string ", vv)
 			}
 		}
 	}
-
-	/*
-		if billingCode == "" {
-			return nil, UnprocessableEntityWithMessage("BillingCodeRequired", "The billing code was not provided.")
-		}
-	*/
 
 	ok, err := b.service.IsDuplicateInstance(distributionID)
 
