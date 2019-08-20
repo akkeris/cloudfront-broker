@@ -173,12 +173,12 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 	plans := make([]osb.Plan, 0)
 
 	for rows.Next() {
-		var planID, name, costUnit string
+		var planID, name, serviceName, costUnit string
 		var humanName, description, catagories sql.NullString
 		var cents int32
 		var free bool
 
-		err := rows.Scan(&planID, &name, &name, &humanName, &description, &catagories, &free, &cents, &costUnit)
+		err := rows.Scan(&planID, &name, &serviceName, &humanName, &description, &catagories, &free, &cents, &costUnit)
 		if err != nil {
 			glog.Errorf("Scan from plans query failed: %s\n", err.Error())
 			return nil, errors.New("Scan from plans query failed: " + err.Error())
