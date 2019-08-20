@@ -212,9 +212,11 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 			Description: nullStringValue(description),
 			Free:        &free,
 			Metadata: map[string]interface{}{
-				"humanName":  nullStringValue(humanName),
-				"cents":      cents,
-				"cost_unit":  costUnit,
+				"human_name": nullStringValue(humanName),
+				"price": map[string]interface{}{
+					"cents":     cents,
+					"cost_unit": costUnit,
+				},
 				"catagories": nullStringValue(catagories),
 			},
 			Schemas: &schemas,
