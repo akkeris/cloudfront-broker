@@ -40,13 +40,14 @@ jobs:
             if [ "${CIRCLE_BRANCH}" != "release" ]; then
               if [ "${CIRCLE_PROJECT_USERNAME}" == "akkeris" ]; then
                 docker login -u $DOCKER_LOGIN -p $DOCKER_PASS
-                docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
-                docker push "docker.io/akkeris/cloudfront-broker:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
                 if [ "${CIRCLE_BRANCH}" == "master" ]; then
                   docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
-                  #docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
-                  #docker push "docker.io/akkeris/cloudfront-broker:latest"
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
+                  docker push "docker.io/akkeris/cloudfront-broker:latest"
                   docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
+                else
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-alpha"
+                  docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-alpha"
                 fi
               fi
             fi
