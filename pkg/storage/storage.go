@@ -212,10 +212,19 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 			Description: nullStringValue(description),
 			Free:        &free,
 			Metadata: map[string]interface{}{
-				"human_name": nullStringValue(humanName),
+				"human_name":  nullStringValue(humanName),
+				"displayName": nullStringValue(humanName),
 				"price": map[string]interface{}{
-					"cents":     cents,
-					"cost_unit": costUnit,
+					"cents": cents,
+					"unit":  costUnit,
+				},
+				"costs": []map[string]interface{}{
+					{
+						"amount": map[string]interface{}{
+							"cents": cents,
+						},
+						"unit": costUnit,
+					},
 				},
 				"catagories": nullStringValue(catagories),
 			},
@@ -270,8 +279,10 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 			PlanUpdatable:       &planUpdateable,
 			Tags:                strings.Split(nullStringValue(serviceCatagories), ","),
 			Metadata: map[string]interface{}{
-				"name":  nullStringValue(serviceHumanName),
-				"image": nullStringValue(serviceImage),
+				"name":            nullStringValue(serviceHumanName),
+				"displayName":     nullStringValue(serviceHumanName),
+				"longDescription": nullStringValue(serviceDescription),
+				"imageUrl":        nullStringValue(serviceImage),
 			},
 			Plans: osbPlans,
 		})
