@@ -1,2 +1,2 @@
 #!/bin/sh
-exec ./start.sh --tasks
+exec ./start.sh --tasks $*
