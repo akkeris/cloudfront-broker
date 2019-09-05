@@ -21,38 +21,64 @@ type AwsConfig struct {
 
 type cloudFrontInstance struct {
 	distributionID       *string
-	billingCode          *string
-	planID               *string
-	serviceID            *string
-	cloudfrontID         *string
-	cloudfrontURL        *string
+	billingCode          *string `json:"billing_code"`
+	planID               *string `json:"plan_id"`
+	serviceID            *string `json:"service_id"`
+	cloudfrontID         *string `json:"cloudfront_id"`
+	cloudfrontURL        *string `json:"cloudfront_url"`
 	callerReference      *string
-	originAccessIdentity *string
-	s3Bucket             *s3Bucket
+	originAccessIdentity *string   `json:"origin_access_identity"`
+	s3Bucket             *s3Bucket `json:"s3_bucket"`
 	operationKey         *string
 }
 
 type s3Bucket struct {
 	originID   *string
-	bucketName *string
-	fullname   *string
-	bucketURI  *string
-	iAMUser    *iAMUser
+	bucketName *string  `json:"bucket_name"`
+	fullname   *string  `json:"fullname"`
+	bucketURI  *string  `json:"bucket_uri"`
+	iAMUser    *iAMUser `json:"iam_user"`
 }
 
 type iAMUser struct {
-	userName  *string
-	arn       *string
-	accessKey *string
-	secretKey *string
+	userName  *string `json:"username"`
+	arn       *string `json:"arn"`
+	accessKey *string `json:"access_key"`
+	secretKey *string `json:"secret_key"`
 }
 
-// InstanceSpec is what's returned to calling app
+// InstanceSpec returned from bare GET request, OSB V2.14
+
+type AccessSpec struct {
+	CloudFrontURL      *string `structs:"CLOUDFRONT_URL"`
+	BucketName         *string `structs:"CLOUDFRONT_BUCKET_NAME"`
+	AwsAccessKey       *string `structs:"CLOUDFRONT_AWS_ACCESS_KEY"`
+	AwsSecretAccessKey *string `structs:"CLOUDFRONT_AWS_SECRET_ACCESS_KEY"`
+}
+
+type IAMUserSpec struct {
+	UserName  *string `json:"username"`
+	ARN       *string `json:"ARN"`
+	AccessKey *string `json:"access_key"`
+	SecretKey *string `json:"secret_access_key"`
+}
+
+type S3BucketSpec struct {
+	BucketName *string      `json:"bucket_name"`
+	Fullname   *string      `json:"fullname"`
+	BucketURI  *string      `json:"bucket_uri"`
+	IAMUser    *IAMUserSpec `json:"iam_user"`
+}
+
 type InstanceSpec struct {
-	CloudFrontURL      string `json:"CLOUDFRONT_URL"`
-	BucketName         string `json:"CLOUDFRONT_BUCKET_NAME"`
-	AwsAccessKey       string `json:"CLOUDFRONT_AWS_ACCESS_KEY"`
-	AwsSecretAccessKey string `json:"CLOUDFRONT_AWS_SECRET_ACCESS_KEY"`
+	ServiceID            *string       `json:"service_id"`
+	PlanID               *string       `json:"plan_id"`
+	BillingCode          *string       `json:"billingcode"`
+	CloudfrontID         *string       `json:"cloudfront_id"`
+	CloudfrontURL        *string       `json:"cloudfront_url"`
+	OriginAccessIdentity *string       `json:"origin_access_idenity"`
+	S3Bucket             *S3BucketSpec `json:"s3_bucket"`
+	Access               *AccessSpec   `json:"access"`
 }
 
 // Status strings from osb-service-lib

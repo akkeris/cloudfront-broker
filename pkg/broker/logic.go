@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver"
+	"github.com/fatih/structs"
 	"github.com/golang/glog"
 	"github.com/nu7hatch/gouuid"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
@@ -288,13 +289,15 @@ func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext)
 
 	response := &broker.BindResponse{
 		BindResponse: osb.BindResponse{
-			Async: false,
-			Credentials: map[string]interface{}{
-				"CLOUDFRONT_URL":                   cloudFrontInstance.CloudFrontURL,
-				"CLOUDFRONT_BUCKET_NAME":           cloudFrontInstance.BucketName,
-				"CLOUDFRONT_AWS_ACCESS_KEY":        cloudFrontInstance.AwsAccessKey,
-				"CLOUDFRONT_AWS_SECRET_ACCESS_KEY": cloudFrontInstance.AwsSecretAccessKey,
+			Async:       false,
+			Credentials: structs.Map(cloudFrontInstance.Access),
+			/*				map[string]interface{}{
+				"CLOUDFRONT_URL":                   cloudFrontInstance.Access.CloudFrontURL,
+				"CLOUDFRONT_BUCKET_NAME":           cloudFrontInstance.Access.BucketName,
+				"CLOUDFRONT_AWS_ACCESS_KEY":        cloudFrontInstance.Access.AwsAccessKey,
+				"CLOUDFRONT_AWS_SECRET_ACCESS_KEY": cloudFrontInstance.Access.AwsSecretAccessKey,
 			},
+			*/
 		},
 	}
 

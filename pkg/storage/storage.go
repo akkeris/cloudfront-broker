@@ -316,6 +316,7 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 	err := p.db.QueryRow(selectDistScript, distributionID).Scan(
 		&distribution.DistributionID,
 		&distribution.PlanID,
+		&distribution.ServiceID,
 		&distribution.CloudfrontID,
 		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,
@@ -347,13 +348,14 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 // a aistribtuions is not deleted from the database, it's deletedat date/time is set to
 // signify it's been deleted from AWS.
 func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution, error) {
-	selectDist := selectDistScript + "and deleted_at is null"
+	selectDist := selectDistScript + "and d.deleted_at is null"
 
 	distribution := &Distribution{}
 
 	err := p.db.QueryRow(selectDist, distributionID).Scan(
 		&distribution.DistributionID,
 		&distribution.PlanID,
+		&distribution.ServiceID,
 		&distribution.CloudfrontID,
 		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,

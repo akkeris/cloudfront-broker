@@ -41,6 +41,7 @@ type Plan struct {
 type Distribution struct {
 	DistributionID       string
 	PlanID               string
+	ServiceID            string // from plan table
 	CloudfrontID         sql.NullString
 	CloudfrontURL        sql.NullString
 	OriginAccessIdentity sql.NullString

@@ -63,6 +63,7 @@ func (s *AwsConfig) getCloudfrontInstance(distributionID string) (*cloudFrontIns
 	cf := &cloudFrontInstance{
 		distributionID:       &distribution.DistributionID,
 		billingCode:          s.stg.NullString(distribution.BillingCode),
+		serviceID:            &distribution.ServiceID,
 		planID:               &distribution.PlanID,
 		cloudfrontID:         s.stg.NullString(distribution.CloudfrontID),
 		cloudfrontURL:        s.stg.NullString(distribution.CloudfrontURL),
@@ -99,10 +100,29 @@ func (s *AwsConfig) GetCloudFrontInstanceSpec(distributionID string) (*InstanceS
 	}
 
 	cfi := &InstanceSpec{
-		CloudFrontURL:      *cf.cloudfrontURL,
-		BucketName:         *cf.s3Bucket.bucketName,
-		AwsAccessKey:       *cf.s3Bucket.iAMUser.accessKey,
-		AwsSecretAccessKey: *cf.s3Bucket.iAMUser.secretKey,
+		ServiceID:            cf.planID,
+		PlanID:               cf.planID,
+		BillingCode:          cf.billingCode,
+		CloudfrontID:         cf.cloudfrontID,
+		CloudfrontURL:        cf.cloudfrontURL,
+		OriginAccessIdentity: cf.originAccessIdentity,
+		S3Bucket: &S3BucketSpec{
+			BucketName: cf.s3Bucket.bucketName,
+			Fullname:   cf.s3Bucket.fullname,
+			BucketURI:  cf.s3Bucket.bucketURI,
+			IAMUser: &IAMUserSpec{
+				UserName:  cf.s3Bucket.iAMUser.userName,
+				ARN:       cf.s3Bucket.iAMUser.arn,
+				AccessKey: cf.s3Bucket.iAMUser.accessKey,
+				SecretKey: cf.s3Bucket.iAMUser.secretKey,
+			},
+		},
+		Access: &AccessSpec{
+			CloudFrontURL:      cf.cloudfrontURL,
+			BucketName:         cf.s3Bucket.bucketName,
+			AwsAccessKey:       cf.s3Bucket.iAMUser.accessKey,
+			AwsSecretAccessKey: cf.s3Bucket.iAMUser.secretKey,
+		},
 	}
 
 	return cfi, nil

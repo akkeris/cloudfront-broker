@@ -216,20 +216,22 @@ const checkPlanScript string = `
 
 const selectDistScript string = `
   select 
-    distribution_id, 
-    plan_id, 
-    cloudfront_id, 
-    cloudfront_url, 
-    origin_access_identity, 
-    claimed, 
-    status, 
-    billing_code, 
-    caller_reference,
-    created_at,
-    updated_at,
-    deleted_at
-  from distributions
-  where distribution_id = $1
+    d.distribution_id, 
+    d.plan_id,
+    p.service_id,
+    d.cloudfront_id, 
+    d.cloudfront_url, 
+    d.origin_access_identity, 
+    d.claimed, 
+    d.status, 
+    d.billing_code, 
+    d.caller_reference,
+    d.created_at,
+    d.updated_at,
+    d.deleted_at
+  from distributions d, plans p
+  where d.distribution_id = $1
+  and p.plan_id = d.plan_id
 `
 
 const insertDistScript string = `insert into distributions
