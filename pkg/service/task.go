@@ -101,7 +101,7 @@ func curTaskFinished(curTask *storage.Task, result string, msg string) *storage.
 }
 
 func (svc *AwsConfig) getTaskState(distributionID string) (*osb.LastOperationResponse, error) {
-	glog.Infof("===== getTaskState [%s] =====", distributionID)
+	glog.V(4).Infof("===== getTaskState [%s] =====", distributionID)
 
 	task, err := svc.stg.GetTaskByDistribution(distributionID)
 
@@ -141,7 +141,7 @@ func (svc *AwsConfig) getTaskState(distributionID string) (*osb.LastOperationRes
 
 // ActionCreateNew sets up the action to create a new distribution
 func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
-	glog.Infof("===== actionCreateNew [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateNew [%s] =====", *cf.operationKey)
 
 	err := svc.stg.NewDistribution(*cf.distributionID, *cf.planID, cf.billingCode, *cf.callerReference, statusPending)
 
@@ -175,7 +175,7 @@ func (svc *AwsConfig) ActionCreateNew(cf *cloudFrontInstance) error {
 }
 
 func (svc *AwsConfig) actionCreateOrigin(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreateOrigin [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateOrigin [%s] =====", *cf.operationKey)
 
 	if err := svc.createS3Bucket(cf); err != nil {
 		msg := fmt.Sprintf("actionCreateOrigin[%s]: error: %s", *cf.operationKey, err.Error())
@@ -195,7 +195,7 @@ func (svc *AwsConfig) actionCreateOrigin(curTask *storage.Task, cf *cloudFrontIn
 }
 
 func (svc *AwsConfig) actionCreateIAMUser(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreateIAMUser [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateIAMUser [%s] =====", *cf.operationKey)
 
 	originID := &OriginID{}
 	_ = json.Unmarshal([]byte(curTask.Metadata.String), originID)
@@ -232,7 +232,7 @@ func (svc *AwsConfig) actionCreateIAMUser(curTask *storage.Task, cf *cloudFrontI
 }
 
 func (svc *AwsConfig) actionCreateAccessKey(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreateAccessKey [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateAccessKey [%s] =====", *cf.operationKey)
 
 	iAMUser := &IAMUser{}
 	_ = json.Unmarshal([]byte(curTask.Metadata.String), iAMUser)
@@ -266,7 +266,7 @@ func (svc *AwsConfig) actionCreateAccessKey(curTask *storage.Task, cf *cloudFron
 }
 
 func (svc *AwsConfig) actionCreateOriginAccessIdentity(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreateOriginAccessIdentity [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateOriginAccessIdentity [%s] =====", *cf.operationKey)
 
 	err := svc.createOriginAccessIdentity(cf)
 	if err != nil {
@@ -281,7 +281,7 @@ func (svc *AwsConfig) actionCreateOriginAccessIdentity(curTask *storage.Task, cf
 }
 
 func (svc *AwsConfig) actionIsOriginAccessIdentityReady(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionIsOriginAccessIdentityReady [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionIsOriginAccessIdentityReady [%s] =====", *cf.operationKey)
 
 	ready, err := svc.isOriginAccessIdentityReady(cf)
 	if err != nil {
@@ -291,7 +291,7 @@ func (svc *AwsConfig) actionIsOriginAccessIdentityReady(curTask *storage.Task, c
 		return curTask, errors.New(msg)
 	} else if !ready {
 		curTask.Retries++
-		glog.Infof("actionIsOriginAccessIdentityReady [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
+		glog.V(3).Infof("actionIsOriginAccessIdentityReady [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
 		return curTask, nil
 	} else {
 		curTask.Retries = 0
@@ -302,7 +302,7 @@ func (svc *AwsConfig) actionIsOriginAccessIdentityReady(curTask *storage.Task, c
 }
 
 func (svc *AwsConfig) actionCreateDistribution(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreateDistribution [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreateDistribution [%s] =====", *cf.operationKey)
 
 	err := svc.createDistribution(cf)
 	if err != nil {
@@ -317,7 +317,7 @@ func (svc *AwsConfig) actionCreateDistribution(curTask *storage.Task, cf *cloudF
 }
 
 func (svc *AwsConfig) actionAddBucketPolicy(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionAddBucketPolicy [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionAddBucketPolicy [%s] =====", *cf.operationKey)
 
 	if err := svc.addBucketPolicy(cf); err != nil {
 		msg := fmt.Sprintf("actionAddBucketPolicy[%s]: error: %s", *cf.operationKey, err.Error())
@@ -331,7 +331,7 @@ func (svc *AwsConfig) actionAddBucketPolicy(curTask *storage.Task, cf *cloudFron
 }
 
 func (svc *AwsConfig) actionIsDistributionDeployed(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionIsDistributionDeployed [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionIsDistributionDeployed [%s] =====", *cf.operationKey)
 	deployed, err := svc.isDistributionDeployed(cf)
 
 	if err != nil {
@@ -340,7 +340,7 @@ func (svc *AwsConfig) actionIsDistributionDeployed(curTask *storage.Task, cf *cl
 		return curTask, errors.New(msg)
 	} else if !deployed {
 		curTask.Retries++
-		glog.Infof("actionIsDistributionDeployed [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
+		glog.V(3).Infof("actionIsDistributionDeployed [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
 		return curTask, nil
 	} else {
 		curTask.Retries = 0
@@ -352,7 +352,7 @@ func (svc *AwsConfig) actionIsDistributionDeployed(curTask *storage.Task, cf *cl
 }
 
 func (svc *AwsConfig) actionCreated(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreated [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreated [%s] =====", *cf.operationKey)
 
 	err := svc.stg.UpdateDistributionStatus(*cf.distributionID, statusDeployed, false)
 	if err != nil {
@@ -368,7 +368,7 @@ func (svc *AwsConfig) actionCreated(curTask *storage.Task, cf *cloudFrontInstanc
 
 // ActionDeleteNew sets up the action to delete a distribution
 func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
-	glog.Infof("===== actionDeleteNew [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDeleteNew [%s] =====", *cf.operationKey)
 
 	err := svc.stg.UpdateDistributionStatus(*cf.distributionID, statusDisabling, false)
 	if err != nil {
@@ -401,7 +401,7 @@ func (svc *AwsConfig) ActionDeleteNew(cf *cloudFrontInstance) error {
 }
 
 func (svc *AwsConfig) actionDisableDistribution(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionDisableDistribution [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDisableDistribution [%s] =====", *cf.operationKey)
 
 	_, err := svc.getCloudfrontDistribution(cf)
 
@@ -425,7 +425,7 @@ func (svc *AwsConfig) actionDisableDistribution(curTask *storage.Task, cf *cloud
 }
 
 func (svc *AwsConfig) actionDeleteOrigin(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionDeleteOrigin [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDeleteOrigin [%s] =====", *cf.operationKey)
 
 	err := svc.deleteS3Bucket(cf)
 	if err != nil {
@@ -439,7 +439,7 @@ func (svc *AwsConfig) actionDeleteOrigin(curTask *storage.Task, cf *cloudFrontIn
 }
 
 func (svc *AwsConfig) actionDeleteIAMUser(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionDeleteIAMUser [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDeleteIAMUser [%s] =====", *cf.operationKey)
 
 	err := svc.deleteIAMUser(cf)
 	if err != nil {
@@ -453,7 +453,7 @@ func (svc *AwsConfig) actionDeleteIAMUser(curTask *storage.Task, cf *cloudFrontI
 }
 
 func (svc *AwsConfig) actionIsDistributionDisabled(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionIsDistributionDisabled [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionIsDistributionDisabled [%s] =====", *cf.operationKey)
 	disabled, err := svc.isDistributionDisabled(cf)
 
 	if err != nil {
@@ -463,7 +463,7 @@ func (svc *AwsConfig) actionIsDistributionDisabled(curTask *storage.Task, cf *cl
 		return curTask, errors.New(msg)
 	} else if !disabled {
 		curTask.Retries++
-		glog.Infof("actionIsDistributionDisabled [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
+		glog.V(3).Infof("actionIsDistributionDisabled [%s]: retries: %3d", *cf.operationKey, curTask.Retries)
 		return curTask, nil
 	} else {
 		curTask.Retries = 0
@@ -474,7 +474,7 @@ func (svc *AwsConfig) actionIsDistributionDisabled(curTask *storage.Task, cf *cl
 }
 
 func (svc *AwsConfig) actionDeleteDistribution(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionDeleteDistribution [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDeleteDistribution [%s] =====", *cf.operationKey)
 
 	err := svc.deleteDistribution(cf)
 	if err != nil {
@@ -488,7 +488,7 @@ func (svc *AwsConfig) actionDeleteDistribution(curTask *storage.Task, cf *cloudF
 }
 
 func (svc *AwsConfig) actionDeleteOriginAccessIdentity(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionDeleteOriginAccessIdentity [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionDeleteOriginAccessIdentity [%s] =====", *cf.operationKey)
 
 	err := svc.deleteOriginAccessIdentity(cf)
 	if err != nil {
@@ -502,7 +502,7 @@ func (svc *AwsConfig) actionDeleteOriginAccessIdentity(curTask *storage.Task, cf
 }
 
 func (svc *AwsConfig) actionDeleted(curTask *storage.Task, cf *cloudFrontInstance) (*storage.Task, error) {
-	glog.Infof("===== actionCreated [%s] =====", *cf.operationKey)
+	glog.V(4).Infof("===== actionCreated [%s] =====", *cf.operationKey)
 	err := svc.stg.UpdateDistributionStatus(*cf.distributionID, statusDeleted, true)
 	if err != nil {
 		msg := fmt.Sprintf("actionCreated: error updating distribution status: %s", err.Error())
@@ -542,7 +542,7 @@ func (svc *AwsConfig) RunTasks() {
 
 	waitDur := time.Duration(time.Second * time.Duration(svc.waitSecs))
 
-	glog.Info("===== RunTasks =====")
+	glog.V(4).Info("===== RunTasks =====")
 	for {
 		var cf *cloudFrontInstance
 		var curTask *storage.Task
@@ -565,7 +565,7 @@ func (svc *AwsConfig) RunTasks() {
 		taskDur := time.Now().Sub(curTask.UpdatedAt)
 
 		msg := fmt.Sprintf("RunTask: %s: %v < %v", curTask.TaskID, taskDur, waitDur)
-		glog.Info(msg)
+		glog.V(4).Info(msg)
 
 		if taskDur < waitDur {
 			time.Sleep(time.Duration(time.Second))

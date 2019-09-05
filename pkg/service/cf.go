@@ -18,7 +18,7 @@ const ttl int64 = 2592000
 
 // IsDuplicateInstance checks if distribution id already created
 func (s *AwsConfig) IsDuplicateInstance(distributionID string) (bool, error) {
-	glog.Info(" ===== IsDuplicateInstance =====")
+	glog.V(4).Info(" ===== IsDuplicateInstance =====")
 
 	_, err := s.stg.GetDistributionWithDeleted(distributionID)
 
@@ -35,7 +35,7 @@ func (s *AwsConfig) IsDuplicateInstance(distributionID string) (bool, error) {
 
 // IsDeployedInstance checks if distribution has been fully deployed
 func (s *AwsConfig) IsDeployedInstance(distributionID string) (bool, error) {
-	glog.Infof("===== IsDeployedInstance =====")
+	glog.V(4).Infof("===== IsDeployedInstance =====")
 
 	dist, err := s.stg.GetDistributionWithDeleted(distributionID)
 
@@ -135,7 +135,7 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 	var cfOut *cloudfront.CreateDistributionWithTagsOutput
 	var ttlPtr *int64
 
-	glog.Info("==== createDistribution ====")
+	glog.V(4).Info("==== createDistribution ====")
 
 	ttlPtr = aws.Int64(int64(ttl))
 
@@ -146,7 +146,7 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 		return errors.New(msg)
 	}
 
-	glog.Info("createDistribution: attach origin access identity")
+	glog.V(4).Info("createDistribution: attach origin access identity")
 	var s3Origin = []*cloudfront.Origin{}
 
 	fullname := strings.Replace(*cf.s3Bucket.bucketURI, "http://", "", -1)
@@ -237,10 +237,11 @@ func (s *AwsConfig) createDistribution(cf *cloudFrontInstance) error {
 		return errors.New(msg)
 	}
 
+	curl := fmt.Sprintf("https://%s", *cfOut.Distribution.DomainName)
 	cf.cloudfrontID = cfOut.Distribution.Id
-	cf.cloudfrontURL = cfOut.Location
+	cf.cloudfrontURL = &curl
 
-	glog.Infof("cloudfrontID: %s\n", *cf.cloudfrontID)
+	glog.V(0).Infof("cloudfrontID: %s\n", *cf.cloudfrontID)
 
 	_, err = s.stg.UpdateDistributionCloudfront(*cf.distributionID, *cf.cloudfrontID, *cf.cloudfrontURL)
 	if err != nil {
@@ -271,7 +272,7 @@ func (s *AwsConfig) DeleteCloudFrontDistribution(distributionID string, operatio
 }
 
 func (s *AwsConfig) getCloudfrontDistribution(cf *cloudFrontInstance) (*cloudfront.GetDistributionOutput, error) {
-	glog.Infof("==== getCloudfrontDistribution [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== getCloudfrontDistribution [%s] ====", *cf.operationKey)
 
 	svc := cloudfront.New(s.sess)
 	if svc == nil {
@@ -292,7 +293,7 @@ func (s *AwsConfig) getCloudfrontDistribution(cf *cloudFrontInstance) (*cloudfro
 }
 
 func (s *AwsConfig) isDistributionDeployed(cf *cloudFrontInstance) (bool, error) {
-	glog.Infof("==== isDistributionDeployed [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== isDistributionDeployed [%s] ====", *cf.operationKey)
 
 	distOut, err := s.getCloudfrontDistribution(cf)
 
@@ -302,7 +303,7 @@ func (s *AwsConfig) isDistributionDeployed(cf *cloudFrontInstance) (bool, error)
 		return false, errors.New(msg)
 	}
 
-	glog.Infof("isDistributionDeployed[%s]: %s", *cf.operationKey, *distOut.Distribution.Status)
+	glog.V(4).Infof("isDistributionDeployed[%s]: %s", *cf.operationKey, *distOut.Distribution.Status)
 	if *distOut.Distribution.Status == "Deployed" && *distOut.Distribution.DistributionConfig.Enabled {
 		return true, nil
 	}
@@ -311,7 +312,7 @@ func (s *AwsConfig) isDistributionDeployed(cf *cloudFrontInstance) (bool, error)
 }
 
 func (s *AwsConfig) isDistributionDisabled(cf *cloudFrontInstance) (bool, error) {
-	glog.Infof("==== isDistributionDisabled [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== isDistributionDisabled [%s] ====", *cf.operationKey)
 
 	distOut, err := s.getCloudfrontDistribution(cf)
 
@@ -321,7 +322,7 @@ func (s *AwsConfig) isDistributionDisabled(cf *cloudFrontInstance) (bool, error)
 		return false, errors.New(msg)
 	}
 
-	glog.Infof("isDistributionDisabled[%s]: %s", *cf.operationKey, *distOut.Distribution.Status)
+	glog.V(4).Infof("isDistributionDisabled[%s]: %s", *cf.operationKey, *distOut.Distribution.Status)
 	if *distOut.Distribution.Status == "Deployed" && !*distOut.Distribution.DistributionConfig.Enabled {
 		return true, nil
 	}
@@ -332,8 +333,8 @@ func (s *AwsConfig) isDistributionDisabled(cf *cloudFrontInstance) (bool, error)
 func (s *AwsConfig) getDistributionConfig(svc *cloudfront.CloudFront, cf *cloudFrontInstance) (*cloudfront.GetDistributionConfigOutput, error) {
 	var err error
 
-	glog.Infof("==== getDistributionConfig [%s] ====", *cf.operationKey)
-	glog.Infof("getDistributionConfig: cloudfront id: %s", *cf.cloudfrontID)
+	glog.V(4).Infof("==== getDistributionConfig [%s] ====", *cf.operationKey)
+	glog.V(1).Infof("getDistributionConfig: cloudfront id: %s", *cf.cloudfrontID)
 
 	getDistConfIn := &cloudfront.GetDistributionConfigInput{
 		Id: aws.String(*cf.cloudfrontID),
@@ -350,7 +351,8 @@ func (s *AwsConfig) getDistributionConfig(svc *cloudfront.CloudFront, cf *cloudF
 }
 
 func (s *AwsConfig) deleteDistribution(cf *cloudFrontInstance) error {
-	glog.Infof("==== deleteDistribution [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== deleteDistribution [%s] ====", *cf.cloudfrontID)
+	glog.V(0).Infof("deleteDistribution operationKey: %s", *cf.operationKey)
 
 	svc := cloudfront.New(s.sess)
 	if svc == nil {
@@ -372,10 +374,10 @@ func (s *AwsConfig) deleteDistribution(cf *cloudFrontInstance) error {
 		switch aerr.Code() {
 		case cloudfront.ErrCodeDistributionNotDisabled:
 			msg := fmt.Sprintf("deleteDistribution[%s]: distribution not disabled: %s", *cf.operationKey, aerr.Error())
-			glog.Info(msg)
+			glog.V(4).Info(msg)
 			return errors.New(aerr.Code())
 		default:
-			glog.Infof("deleteDistribution: err deleting: %s", aerr.Error())
+			glog.V(4).Infof("deleteDistribution: err deleting: %s", aerr.Error())
 			return err
 		}
 	}
@@ -398,7 +400,7 @@ func (s *AwsConfig) updateDistributionDeletedAt(cf *cloudFrontInstance) error {
 func (s *AwsConfig) updateDistributionEnableFlag(cf *cloudFrontInstance, enabled bool) error {
 	var err error
 
-	glog.Infof("==== updateDistributionEnabledFlag [%s] <%t> ====", *cf.operationKey, enabled)
+	glog.V(4).Infof("==== updateDistributionEnabledFlag [%s] <%t> ====", *cf.operationKey, enabled)
 
 	svc := cloudfront.New(s.sess)
 	if svc == nil {
@@ -440,7 +442,7 @@ func (s *AwsConfig) disableDistribution(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) disableCloudfrontDistribution(cf *cloudFrontInstance) error {
-	glog.Infof("==== disableCloudfrontDistribution [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== disableCloudfrontDistribution [%s] ====", *cf.operationKey)
 
 	if err := s.disableDistribution(cf); err != nil {
 		msg := fmt.Sprintf("disableCloudfrontDistribution: setting disable flag: %s", err.Error())
@@ -454,7 +456,7 @@ func (s *AwsConfig) disableCloudfrontDistribution(cf *cloudFrontInstance) error 
 func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) error {
 	var err error
 
-	glog.Info("==== createOriginAccessIdentity ====")
+	glog.V(4).Info("==== createOriginAccessIdentity ====")
 
 	svc := cloudfront.New(s.sess)
 	if svc == nil {
@@ -478,7 +480,7 @@ func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) error {
 
 	cf.originAccessIdentity = originAccessIdentity.CloudFrontOriginAccessIdentity.Id
 
-	glog.Infof("createOriginAccessIdentity: oai id: %s", *cf.originAccessIdentity)
+	glog.V(0).Infof("createOriginAccessIdentity: id: %s", *cf.originAccessIdentity)
 
 	err = s.stg.UpdateDistributionWIthOriginAccessIdentity(*cf.distributionID, *cf.originAccessIdentity)
 	if err != nil {
@@ -491,7 +493,7 @@ func (s *AwsConfig) createOriginAccessIdentity(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) isOriginAccessIdentityReady(cf *cloudFrontInstance) (bool, error) {
-	glog.Info("==== isOriginAccessIdentityReady ====")
+	glog.V(4).Info("==== isOriginAccessIdentityReady ====")
 
 	svc := cloudfront.New(s.sess)
 	if svc == nil {
@@ -509,10 +511,10 @@ func (s *AwsConfig) isOriginAccessIdentityReady(cf *cloudFrontInstance) (bool, e
 			switch aerr.Code() {
 			case cloudfront.ErrCodeNoSuchCloudFrontOriginAccessIdentity:
 				msg := fmt.Sprintf("isOriginAccessIdentityReady: [%s]: origin access identity not ready: %s", *cf.operationKey, aerr.Error())
-				glog.Info(msg)
+				glog.V(4).Info(msg)
 				return false, nil
 			default:
-				glog.Infof("isOriginAccessIdentityReady: error getting origin access identity: %s", aerr.Error())
+				glog.V(4).Infof("isOriginAccessIdentityReady: error getting origin access identity: %s", aerr.Error())
 				return false, err
 			}
 		}
@@ -522,10 +524,10 @@ func (s *AwsConfig) isOriginAccessIdentityReady(cf *cloudFrontInstance) (bool, e
 }
 
 func (s *AwsConfig) deleteOriginAccessIdentity(cf *cloudFrontInstance) error {
-	glog.Infof("==== deleteOriginAccessIdentity [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== deleteOriginAccessIdentity [%s] ====", *cf.operationKey)
 
 	svc := cloudfront.New(s.sess)
-	glog.Infof("cf sess: %#+v\n", svc)
+	glog.V(4).Infof("cf sess: %#+v\n", svc)
 	if svc == nil {
 		msg := "error creating new cloudfront session"
 		glog.Error(msg)
@@ -555,7 +557,7 @@ func (s *AwsConfig) deleteOriginAccessIdentity(cf *cloudFrontInstance) error {
 
 // CheckLastOperation retrieves state from database
 func (s *AwsConfig) CheckLastOperation(distributionID string) (*osb.LastOperationResponse, error) {
-	glog.Infof("===== CheckLastOperation [%s] =====", distributionID)
+	glog.V(4).Infof("===== CheckLastOperation [%s] =====", distributionID)
 
 	response, err := s.getTaskState(distributionID)
 	if err != nil {

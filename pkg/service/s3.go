@@ -25,7 +25,7 @@ func (s *AwsConfig) genBucketName() *string {
 
 func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) error {
 
-	glog.Info("==== createS3Bucket ====")
+	glog.V(4).Info("==== createS3Bucket ====")
 	svc := s3.New(s.sess)
 	if svc == nil {
 		msg := "createS3Bucket: error getting s3 session"
@@ -35,7 +35,7 @@ func (s *AwsConfig) createS3Bucket(cf *cloudFrontInstance) error {
 
 	bucketName := s.genBucketName()
 
-	glog.Infof("createS3Bucket: bucket name: %s", *bucketName)
+	glog.V(0).Infof("createS3Bucket: bucket name: %s", *bucketName)
 
 	s3in := &s3.CreateBucketInput{
 		Bucket: bucketName,
@@ -121,7 +121,7 @@ func (s *AwsConfig) getBucket(originID string) *s3Bucket {
 }
 
 func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
-	glog.Infof("==== addBucketPolicy [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== addBucketPolicy [%s] ====", *cf.operationKey)
 
 	policy, _ := json.Marshal(map[string]interface{}{
 		"Version": "2012-10-17",
@@ -139,7 +139,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 		},
 	})
 
-	glog.Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
+	glog.V(4).Infof("addBucketPolicy [%s]: policy %#v", *cf.operationKey, string(policy))
 	svc := s3.New(s.sess)
 	if svc == nil {
 		msg := "error getting s3 session"
@@ -184,7 +184,7 @@ func (s *AwsConfig) addBucketPolicy(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) deleteS3Bucket(cf *cloudFrontInstance) error {
-	glog.Infof("==== deleteS3Bucket [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== deleteS3Bucket [%s] ====", *cf.operationKey)
 
 	svc := s3.New(s.sess)
 

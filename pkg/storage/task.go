@@ -20,7 +20,7 @@ const (
 func (p *PostgresStorage) AddTask(task *Task) (*Task, error) {
 	var err error
 
-	glog.Info("===== AddTask =====")
+	glog.V(4).Info("===== AddTask =====")
 
 	err = p.db.QueryRow(insertTaskScript, &task.DistributionID, &task.Status, &task.Action, &task.OperationKey, &task.Retries, &task.StartedAt).Scan(&task.TaskID)
 
@@ -35,7 +35,7 @@ func (p *PostgresStorage) AddTask(task *Task) (*Task, error) {
 
 // GetTaskByDistribution retrieves task by distribution id
 func (p *PostgresStorage) GetTaskByDistribution(distributionID string) (*Task, error) {
-	glog.Infof("===== GetTaskByDistribution [%s] =====", distributionID)
+	glog.V(4).Infof("===== GetTaskByDistribution [%s] =====", distributionID)
 	task := Task{}
 
 	err := p.db.QueryRow(selectTaskScript, distributionID).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result)
@@ -54,7 +54,7 @@ func (p *PostgresStorage) PopNextTask() (*Task, error) {
 	var err error
 	var task Task
 
-	glog.Info("===== PopNextTask =====")
+	glog.V(4).Info("===== PopNextTask =====")
 	err = p.db.QueryRow(popNextTaskScript).Scan(&task.TaskID, &task.DistributionID, &task.OperationKey, &task.Status, &task.Action, &task.Retries, &task.Metadata, &task.Result, &task.StartedAt, &task.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (p *PostgresStorage) PopNextTask() (*Task, error) {
 func (p *PostgresStorage) UpdateTaskAction(task *Task) (*Task, error) {
 	var err error
 
-	glog.Info("===== UpdateTaskAction =====")
+	glog.V(4).Info("===== UpdateTaskAction =====")
 
 	err = p.db.QueryRow(updateTaskActionScript, task.TaskID, task.Action, task.Status, task.Retries, task.Result, task.Metadata, task.FinishedAt, task.StartedAt).Scan(
 		&task.TaskID, &task.DistributionID, &task.Action, &task.Status, &task.Retries, &task.Result, &task.Metadata, &task.CreatedAt, &task.UpdatedAt, &task.StartedAt, &task.FinishedAt)

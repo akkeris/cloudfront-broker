@@ -50,8 +50,6 @@ func NewBusinessLogic(ctx context.Context, o Options) (*BusinessLogic, error) {
 		glog.Fatalln(msg)
 	}
 
-	glog.Infof("namePrefix=%s", namePrefix)
-
 	bl := &BusinessLogic{
 		storage: dbStore,
 		service: awsConfig,
@@ -69,7 +67,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	waitSecs := o.WaitSecs
 	maxRetries := o.MaxRetries
 
-	glog.Infof("options: %#+v", o)
+	glog.V(4).Infof("options: %#+v", o)
 
 	if namePrefix == "" && os.Getenv("NAME_PREFIX") != "" {
 		namePrefix = os.Getenv("NAME_PREFIX")
@@ -86,7 +84,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 		}
 		waitSecs = s
 	}
-	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
+	glog.V(2).Infof("InitFromOptions: waitSecs: %d", waitSecs)
 
 	if os.Getenv("MAX_RETRIES") != "" {
 		s, err := strconv.ParseInt(os.Getenv("MAX_RETRIES"), 10, 64)
@@ -95,7 +93,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 		}
 		maxRetries = s
 	}
-	glog.Infof("InitFromOptions: waitSecs: %d", waitSecs)
+	glog.V(2).Infof("InitFromOptions: maxRetries: %d", maxRetries)
 
 	stg, err := storage.InitStorage(ctx, o.DatabaseURL)
 	return stg, namePrefix, waitSecs, maxRetries, err
@@ -117,7 +115,7 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 			Description: &description,
 		}
 	}
-	glog.Infof("catalog response: %#+v", osbResponse)
+	glog.V(4).Infof("catalog response: %#+v", osbResponse)
 
 	response.CatalogResponse = *osbResponse
 
@@ -126,7 +124,6 @@ func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogRes
 
 // Provision starts the provisioning process
 func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.RequestContext) (*broker.ProvisionResponse, error) {
-	var billingCode *string
 
 	b.Lock()
 	defer b.Unlock()
@@ -162,16 +159,6 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 	serviceID := request.ServiceID
 	planID := request.PlanID
 
-	for k, v := range request.Parameters {
-		switch vv := v.(type) {
-		case string:
-			if k == "billing_code" {
-				billingCode = &vv
-				glog.Info(k, " is string ", vv)
-			}
-		}
-	}
-
 	ok, err := b.service.IsDuplicateInstance(distributionID)
 
 	if err != nil {
@@ -182,7 +169,7 @@ func (b *BusinessLogic) Provision(request *osb.ProvisionRequest, c *broker.Reque
 		return nil, ConflictErrorWithMessage("instance already provisioned, is provisioning or has been deleted")
 	}
 
-	err = b.service.CreateCloudFrontDistribution(distributionID, callerReference, operationKey, serviceID, planID, billingCode)
+	err = b.service.CreateCloudFrontDistribution(distributionID, callerReference, operationKey, serviceID, planID, &request.OrganizationGUID)
 	if err != nil {
 		return nil, InternalServerErr()
 	}
@@ -241,20 +228,7 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
-	glog.Infof("LastOperation: instance id: %s", request.InstanceID)
-
-	/*
-	   if request.ServiceID != nil {
-	     glog.Infof("lastop: service id: %s", *request.ServiceID)
-	   }
-	   if request.PlanID != nil {
-	     glog.Infof("lastop: plan id: %s", *request.PlanID)
-	   }
-	   if request.OperationKey == nil {
-	     return nil, UnprocessableEntityWithMessage("OperationKeyRequired", "The operation key was not provided.")
-	   }
-	   operationKey := string(*request.OperationKey)
-	*/
+	glog.V(0).Infof("LastOperation: instance id: %s", request.InstanceID)
 
 	distributionID := request.InstanceID
 
@@ -281,9 +255,50 @@ func (b *BusinessLogic) LastOperation(request *osb.LastOperationRequest, c *brok
 	return response, nil
 }
 
-// Bind is not used
+// Bind gets and returns url, bucket and secret id/key
 func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext) (*broker.BindResponse, error) {
-	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
+
+	if request.AcceptsIncomplete {
+		return nil, UnprocessableEntityWithMessage("AsyncNotSupported", "The query parameter accepts_incomplete=true MUST NOT included the request.")
+	}
+
+	if request.InstanceID == "" {
+		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
+	}
+
+	deployed, err := b.service.IsDeployedInstance(request.InstanceID)
+	if err != nil {
+		if err.Error() == "DistributionNotDeployed" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		} else if err.Error() == "DistributionNotFound" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotFound", "instance not found")
+		}
+	}
+	if !deployed {
+		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
+	}
+
+	// TODO: Add binding to cloudfront distribution and S3 bucket, if not already in tag list
+
+	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(request.InstanceID)
+
+	if err != nil {
+		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
+	}
+
+	response := &broker.BindResponse{
+		BindResponse: osb.BindResponse{
+			Async: false,
+			Credentials: map[string]interface{}{
+				"CLOUDFRONT_URL":                   cloudFrontInstance.CloudFrontURL,
+				"CLOUDFRONT_BUCKET_NAME":           cloudFrontInstance.BucketName,
+				"CLOUDFRONT_AWS_ACCESS_KEY":        cloudFrontInstance.AwsAccessKey,
+				"CLOUDFRONT_AWS_SECRET_ACCESS_KEY": cloudFrontInstance.AwsSecretAccessKey,
+			},
+		},
+	}
+
+	return response, nil
 }
 
 // Unbind is not used
@@ -300,6 +315,64 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 	}
 
 	return &response, nil
+}
+
+// GetInstance returns information about an instance
+func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
+
+	if instanceID == "" {
+		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
+	}
+
+	deployed, err := b.service.IsDeployedInstance(instanceID)
+	if err != nil {
+		if err.Error() == "DistributionNotDeployed" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		} else if err.Error() == "DistributionNotFound" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotFound", "instance not found")
+		}
+	}
+	if !deployed {
+		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
+	}
+
+	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(instanceID)
+
+	if err != nil {
+		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
+	}
+
+	return cloudFrontInstance, nil
+}
+
+// GetBinding validates binding_id is in cf tags then returns credentials, see Bind()
+func (b *BusinessLogic) GetBinding(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
+
+	if instanceID == "" {
+		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
+	}
+
+	deployed, err := b.service.IsDeployedInstance(instanceID)
+	if err != nil {
+		if err.Error() == "DistributionNotDeployed" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
+		} else if err.Error() == "DistributionNotFound" {
+			return nil, UnprocessableEntityWithMessage("InstanceNotFound", "instance not found")
+		}
+	}
+	if !deployed {
+		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
+	}
+
+	// TODO: check if binding id is in tags for cloudfront distribution
+	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(instanceID)
+
+	if err != nil {
+		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
+	}
+
+	return cloudFrontInstance, nil
+
 }
 
 // ValidateBrokerAPIVersion verifies the client OSB version with support OSB versions
@@ -330,32 +403,4 @@ func (b *BusinessLogic) RunTasksInBackground(ctx context.Context) error {
 	b.service.RunTasks()
 	// This should never return
 	return errors.New("system error")
-}
-
-// GetInstance returns information about an instance
-func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
-
-	if instanceID == "" {
-		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
-	}
-
-	deployed, err := b.service.IsDeployedInstance(instanceID)
-	if err != nil {
-		if err.Error() == "DistributionNotDeployed" {
-			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
-		} else if err.Error() == "DistributionNotFound" {
-			return nil, UnprocessableEntityWithMessage("InstanceNotFound", "instance not found")
-		}
-	}
-	if !deployed {
-		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
-	}
-
-	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(instanceID)
-
-	if err != nil {
-		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
-	}
-
-	return cloudFrontInstance, nil
 }

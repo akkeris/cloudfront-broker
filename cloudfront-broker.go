@@ -91,30 +91,30 @@ func runWithContext(ctx context.Context) error {
 		fmt.Printf("%s/%s\n", path.Base(os.Args[0]), "0.1.0")
 		return nil
 	}
+	businessLogic, err := broker.NewBusinessLogic(ctx, options.Options)
+
+	if err != nil {
+		return err
+	}
+
+	if options.BackgroundTasksOnly {
+		glog.V(4).Info("Starting background tasks")
+		return businessLogic.RunTasksInBackground(ctx)
+		// This should never return
+	}
+
 	if (options.TLSCert != "" || options.TLSKey != "") &&
 		(options.TLSCert == "" || options.TLSKey == "") {
 		fmt.Println("To use TLS with specified cert or key data, both --tlsCert and --tlsKey must be used")
 		return nil
 	}
 
-	var port string
-	port = strconv.Itoa(options.Port)
+	port := strconv.Itoa(options.Port)
 	if os.Getenv("PORT") != "" {
 		port = os.Getenv("PORT")
 	} else {
 		fmt.Println("port not set, use --port or env var PORT")
 		return nil
-	}
-
-	businessLogic, err := broker.NewBusinessLogic(ctx, options.Options)
-	if err != nil {
-		return err
-	}
-
-	if options.BackgroundTasksOnly {
-		glog.Info("Starting background tasks")
-		return businessLogic.RunTasksInBackground(ctx)
-		// This should never return
 	}
 
 	addr := ":" + port
@@ -152,21 +152,21 @@ func runWithContext(ctx context.Context) error {
 		s.Router.Use(tr.Middleware)
 	}
 
-	glog.Infof("Starting broker!")
+	glog.Warningf("Starting broker!")
 
 	if options.Insecure {
-		glog.V(4).Infof("Starting insecure broker")
+		glog.Warningf("Starting insecure broker")
 		err = s.Run(ctx, addr)
 	} else {
 		if options.TLSCert != "" && options.TLSKey != "" {
-			glog.V(4).Infof("Starting secure broker with TLS cert and key data")
+			glog.Warningf("Starting secure broker with TLS cert and key data")
 			err = s.RunTLS(ctx, addr, options.TLSCert, options.TLSKey)
 		} else {
 			if options.TLSCertFile == "" || options.TLSKeyFile == "" {
 				glog.Error("unable to run securely without TLS Certificate and Key. Please review options and if running with TLS, specify --tls-cert-file and --tls-private-key-file or --tlsCert and --tlsKey.")
 				return nil
 			}
-			glog.V(4).Infof("Starting secure broker with file based TLS cert and key")
+			glog.Warning("Starting secure broker with file based TLS cert and key")
 			err = s.RunTLSWithTLSFiles(ctx, addr, options.TLSCertFile, options.TLSKeyFile)
 		}
 	}
@@ -202,7 +202,7 @@ func cancelOnInterrupt(ctx context.Context, f context.CancelFunc) {
 	for {
 		select {
 		case <-term:
-			glog.Infof("Received SIGTERM, exiting gracefully...")
+			glog.Warning("Received SIGTERM, exiting gracefully...")
 			f()
 			os.Exit(0)
 		case <-ctx.Done():

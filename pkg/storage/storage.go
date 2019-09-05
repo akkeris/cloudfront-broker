@@ -15,8 +15,8 @@ import (
 	"github.com/golang/glog"
 	"github.com/lib/pq"
 
-	// postgres database routines
 	_ "github.com/lib/pq"
+
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
@@ -40,9 +40,9 @@ func cancelOnInterrupt(ctx context.Context, db *sql.DB) {
 	for {
 		select {
 		case <-term:
-			db.Close()
+			_ = db.Close()
 		case <-ctx.Done():
-			db.Close()
+			_ = db.Close()
 		}
 	}
 }
@@ -105,6 +105,25 @@ func SetNullTime(t *time.Time) pq.NullTime {
 	return nt
 }
 
+func redactDatabaseURL(dburl string) string {
+	pstr, err := pq.ParseURL(dburl)
+
+	if err != nil {
+		return dburl
+	}
+
+	elem := strings.Split(pstr, " ")
+
+	vars := map[string]string{}
+
+	for _, v := range elem {
+		a := strings.Split(v, "=")
+		vars[a[0]] = a[1]
+	}
+
+	return fmt.Sprintf("postgres://[REDACTED]:[REDACTED]@%s:%s/%s", vars["host"], vars["port"], vars["dbname"])
+}
+
 // InitStorage creates connection to the postgres database
 func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, error) {
 	var err error
@@ -119,7 +138,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 		return nil, errors.New("unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option")
 	}
 
-	glog.Infof("DATABASE_URL=%s", DatabaseURL)
+	glog.V(0).Infof("DATABASE_URL=%s", redactDatabaseURL(DatabaseURL))
 
 	db, err := sql.Open("postgres", DatabaseURL)
 	if err != nil {
@@ -300,7 +319,7 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 		&distribution.CloudfrontID,
 		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,
-		&distribution.CloudfrontURL,
+		&distribution.Claimed,
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
@@ -312,7 +331,7 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
-		glog.Info(msg)
+		glog.V(4).Info(msg)
 		return nil, errors.New(DistributionNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("GetDistribution: error finding distribution: %s", err.Error())
@@ -338,7 +357,7 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 		&distribution.CloudfrontID,
 		&distribution.CloudfrontURL,
 		&distribution.OriginAccessIdentity,
-		&distribution.CloudfrontURL,
+		&distribution.Claimed,
 		&distribution.Status,
 		&distribution.BillingCode,
 		&distribution.CallerReference,
@@ -350,7 +369,7 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
-		glog.Info(msg)
+		glog.V(4).Info(msg)
 		return nil, errors.New(DistributionNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("GetDistribution: error finding distribution: %s", err.Error())
@@ -399,7 +418,7 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 		return errors.New(msg)
 	}
 
-	glog.Infof("NewDistribution: distribution id: %s", distribution.DistributionID)
+	glog.V(1).Infof("NewDistribution: distribution id: %s", distribution.DistributionID)
 
 	return nil
 }
@@ -480,7 +499,7 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 
 // AddOrigin inserts origin into origins table
 func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bucketURL string, originPath string) (*Origin, error) {
-	glog.Info("===== AddOrigin =====")
+	glog.V(4).Info("===== AddOrigin =====")
 
 	origin := &Origin{
 		DistributionID: distributionID,
@@ -498,7 +517,7 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 		return nil, errors.New(msg)
 	}
 
-	glog.Infof("AddOrigin: originId: %s", origin.OriginID)
+	glog.V(1).Infof("AddOrigin: originId: %s", origin.OriginID)
 
 	return origin, nil
 }
@@ -535,7 +554,7 @@ func (p *PostgresStorage) getOrigin(selectOrigin string, selectKey string) (*Ori
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("getOrigin: origin not found: %s", err.Error())
-		glog.Info(msg)
+		glog.V(4).Info(msg)
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("getOrigin: error finding origin: %s", err.Error())
@@ -557,7 +576,7 @@ func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID str
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("UpdateDeleteOrigin: origin not found: %s", err.Error())
-		glog.Info(msg)
+		glog.V(4).Info(msg)
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("UpdateDeleteOrigin: error updating deleted at: %s", err.Error())

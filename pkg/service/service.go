@@ -55,9 +55,9 @@ func Init(stg *storage.PostgresStorage, namePrefix string, waitSecs int64, maxRe
 
 	c.conf.Region = &region
 
-	glog.Infof("namePrefix: %s", c.namePrefix)
-	glog.Infof("region: %s", *c.conf.Region)
-	glog.Infof("AWS_ACCESS_KEY=%s", os.Getenv("AWS_ACCESS_KEY"))
+	glog.V(0).Infof("namePrefix: %s", c.namePrefix)
+	glog.V(0).Infof("region: %s", *c.conf.Region)
+	glog.V(0).Infof("AWS_ACCESS_KEY=%s", os.Getenv("AWS_ACCESS_KEY"))
 
 	c.sess = session.Must(session.NewSession(c.conf))
 	return &c, nil

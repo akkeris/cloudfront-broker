@@ -25,7 +25,7 @@ func httpWrite(w http.ResponseWriter, status int, obj interface{}) {
 
 func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method string, handler func(string, map[string]string, *broker.RequestContext) (interface{}, error)) {
 	path := fmt.Sprintf("/v2/service_instances/{instance_id}%s", pathIn)
-	glog.Infof("AddRoute: Adding route %s", path)
+	glog.V(2).Infof("AddRoute: Adding route %s", path)
 	router.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		c := broker.RequestContext{Request: r, Writer: w}
@@ -63,4 +63,5 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 // AddRoutes adds extra routes not in broker interface
 func (b *BusinessLogic) AddRoutes(router *mux.Router) {
 	b.addRoute(router, "", "GET", b.GetInstance)
+	b.addRoute(router, "/service_bindings/{binding_id}", "GET", b.GetBinding)
 }

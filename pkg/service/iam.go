@@ -16,7 +16,7 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 	var err error
 	var iamIn *iam.CreateUserInput
 
-	glog.Infof("==== createIAMUser ====")
+	glog.V(4).Infof("==== createIAMUser ====")
 
 	svc := iam.New(s.sess)
 	if svc == nil {
@@ -66,7 +66,7 @@ func (s *AwsConfig) createIAMUser(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) isIAMUserReady(userName string) (bool, error) {
-	glog.Info("==== isIAMUserReady ====")
+	glog.V(4).Info("==== isIAMUserReady ====")
 
 	svc := iam.New(s.sess)
 	if svc == nil {
@@ -85,7 +85,7 @@ func (s *AwsConfig) isIAMUserReady(userName string) (bool, error) {
 			switch aerr.Code() {
 			case iam.ErrCodeNoSuchEntityException:
 				msg := fmt.Sprintf("checkIAMUser: iam user not found: %s", err.Error())
-				glog.Info(msg)
+				glog.V(4).Info(msg)
 				return false, errors.New(aerr.Code())
 			default:
 				msg := fmt.Sprintf("checkIAMUser: error getting iam user: %s", aerr.Error())
@@ -95,13 +95,13 @@ func (s *AwsConfig) isIAMUserReady(userName string) (bool, error) {
 		}
 	}
 
-	glog.Infof("isIAMUserReady: iam username: %s", *giamOut.User.UserName)
+	glog.V(0).Infof("isIAMUserReady: iam username: %s", *giamOut.User.UserName)
 
 	return true, nil
 }
 
 func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
-	glog.Infof("==== createAccessKey [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== createAccessKey [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
 	if svc == nil {
@@ -154,7 +154,7 @@ func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
 		UserName:       cf.s3Bucket.iAMUser.userName,
 	})
 
-	glog.Infof("createAccessKey: access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
+	glog.V(0).Infof("createAccessKey: access key: %s", *accessKeyOut.AccessKey.AccessKeyId)
 	cf.s3Bucket.iAMUser.accessKey = accessKeyOut.AccessKey.AccessKeyId
 	cf.s3Bucket.iAMUser.secretKey = accessKeyOut.AccessKey.SecretAccessKey
 
@@ -170,7 +170,7 @@ func (s *AwsConfig) createAccessKey(cf *cloudFrontInstance) error {
 }
 
 func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
-	glog.Infof("==== deleteIAMUser [%s] ====", *cf.operationKey)
+	glog.V(4).Infof("==== deleteIAMUser [%s] ====", *cf.operationKey)
 
 	svc := iam.New(s.sess)
 	if svc == nil {
@@ -179,7 +179,7 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 		return errors.New(msg)
 	}
 
-	glog.Infof("deleteIAMUser [%s]: deleting iam user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
+	glog.V(4).Infof("deleteIAMUser [%s]: deleting iam user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
 
 	accessKeysOut, err := svc.ListAccessKeys(&iam.ListAccessKeysInput{
 		UserName: cf.s3Bucket.iAMUser.userName,
@@ -192,7 +192,7 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 	}
 
 	for i, accessKeyMeta := range accessKeysOut.AccessKeyMetadata {
-		glog.Infof("deleteIAMUser [%s]: deleting access key[%d]: %s", *cf.operationKey, i, *accessKeyMeta.AccessKeyId)
+		glog.V(4).Infof("deleteIAMUser [%s]: deleting access key[%d]: %s", *cf.operationKey, i, *accessKeyMeta.AccessKeyId)
 
 		_, err := svc.DeleteAccessKey(&iam.DeleteAccessKeyInput{
 			UserName:    cf.s3Bucket.iAMUser.userName,
@@ -218,7 +218,7 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 
 	for i, policyName := range userPolicyOut.PolicyNames {
 
-		glog.Infof("deleteIAMUser [%s]: delete user policy{%d]: %s", *cf.operationKey, i, *policyName)
+		glog.V(4).Infof("deleteIAMUser [%s]: delete user policy{%d]: %s", *cf.operationKey, i, *policyName)
 
 		_, err = svc.DeleteUserPolicy(&iam.DeleteUserPolicyInput{
 			UserName:   cf.s3Bucket.iAMUser.userName,
@@ -232,7 +232,7 @@ func (s *AwsConfig) deleteIAMUser(cf *cloudFrontInstance) error {
 		}
 	}
 
-	glog.Infof("deleteIAMUser [%s]: delete user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
+	glog.V(4).Infof("deleteIAMUser [%s]: delete user: %s", *cf.operationKey, *cf.s3Bucket.iAMUser.userName)
 
 	_, err = svc.DeleteUser(&iam.DeleteUserInput{
 		UserName: cf.s3Bucket.iAMUser.userName,

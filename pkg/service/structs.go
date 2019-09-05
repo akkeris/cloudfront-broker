@@ -50,9 +50,9 @@ type iAMUser struct {
 // InstanceSpec is what's returned to calling app
 type InstanceSpec struct {
 	CloudFrontURL      string `json:"CLOUDFRONT_URL"`
-	BucketName         string `json:"CF_BUCKET_NAME"`
-	AwsAccessKey       string `json:"CF_AWS_ACCESS_KEY"`
-	AwsSecretAccessKey string `json:"CF_AWS_SECRET_ACCESS_KEY"`
+	BucketName         string `json:"CLOUDFRONT_BUCKET_NAME"`
+	AwsAccessKey       string `json:"CLOUDFRONT_AWS_ACCESS_KEY"`
+	AwsSecretAccessKey string `json:"CLOUDFRONT_AWS_SECRET_ACCESS_KEY"`
 }
 
 // Status strings from osb-service-lib
