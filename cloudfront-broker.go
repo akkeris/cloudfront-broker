@@ -152,7 +152,7 @@ func runWithContext(ctx context.Context) error {
 		s.Router.Use(tr.Middleware)
 	}
 
-	glog.Warningf("Starting broker!")
+	glog.Infof("Starting broker!")
 
 	if options.Insecure {
 		glog.Warningf("Starting insecure broker")

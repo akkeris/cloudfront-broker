@@ -56,6 +56,37 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 	}).Methods(method)
 }
 
+func (b *BusinessLogic) OSBAddGetInstance(router *mux.Router) {
+	router.HandleFunc("/v2/service_instances/{instance_id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+
+		req := GetInstanceRequest{
+			InstanceID: vars["instance_id"],
+		}
+
+		c := &broker.RequestContext{
+			Writer:  w,
+			Request: r,
+		}
+
+		resp, err := b.GetInstance(&req, c)
+
+		if err != nil {
+			if httpErr, ok := osb.IsHTTPError(err); ok {
+				body := &errorSpec{
+					Description:  httpErr.Description,
+					ErrorMessage: httpErr.ErrorMessage,
+				}
+				httpWrite(w, httpErr.StatusCode, body)
+			} else {
+				httpWrite(w, http.StatusInternalServerError, InternalServerErr())
+			}
+			return
+		}
+		httpWrite(w, http.StatusOK, resp)
+	}).Methods("GET")
+}
+
 func (b *BusinessLogic) OSBAddGetBindingRoute(router *mux.Router) {
 	router.HandleFunc("/v2/service_instances/{instance_id}/service_bindings/{binding_id}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
@@ -90,7 +121,8 @@ func (b *BusinessLogic) OSBAddGetBindingRoute(router *mux.Router) {
 
 // AddRoutes adds extra routes not in broker interface
 func (b *BusinessLogic) AddRoutes(router *mux.Router) {
-	b.addRoute(router, "", "GET", b.GetInstance)
+	//	b.addRoute(router, "", "GET", b.GetInstance)
 	// 	b.addRoute(router, "/service_bindings/{binding_id}", "GET", b.GetBinding)
+	b.OSBAddGetInstance(router)
 	b.OSBAddGetBindingRoute(router)
 }

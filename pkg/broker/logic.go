@@ -299,7 +299,7 @@ func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext)
 
 // Unbind is not used
 func (b *BusinessLogic) Unbind(request *osb.UnbindRequest, c *broker.RequestContext) (*broker.UnbindResponse, error) {
-	return nil, NotFoundWithMessage("BindingNotProvided", "Service binding is not provided")
+	return nil, NotFoundWithMessage("BindingNotProvided", "Service un-binding is not provided")
 }
 
 // Update is not used
@@ -314,7 +314,9 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 }
 
 // GetInstance returns information about an instance
-func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
+
+func (b *BusinessLogic) GetInstance(r *GetInstanceRequest, c *broker.RequestContext) (*GetInstanceResponse, error) {
+	instanceID := r.InstanceID
 
 	if instanceID == "" {
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
@@ -338,7 +340,14 @@ func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, c
 		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
 	}
 
-	return cloudFrontInstance, nil
+	resp := &GetInstanceResponse{
+		ServiceID:    cloudFrontInstance.ServiceID,
+		PlanID:       cloudFrontInstance.PlanID,
+		DashboardURL: nil,
+		Parameters:   structs.Map(cloudFrontInstance),
+	}
+
+	return resp, nil
 }
 
 // GetBinding validates binding_id is in cf tags then returns credentials, see Bind()

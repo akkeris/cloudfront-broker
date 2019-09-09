@@ -78,7 +78,7 @@ type InstanceSpec struct {
 	CloudfrontURL        *string       `json:"cloudfront_url"`
 	OriginAccessIdentity *string       `json:"origin_access_identity"`
 	S3Bucket             *S3BucketSpec `json:"s3_bucket"`
-	Access               *AccessSpec   `json:"access"`
+	Access               *AccessSpec   `json:"credentials"`
 }
 
 // Status strings from osb-service-lib

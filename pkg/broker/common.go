@@ -7,6 +7,17 @@ import (
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
+type GetInstanceRequest struct {
+	InstanceID string `json:"instance_id"`
+}
+
+type GetInstanceResponse struct {
+	ServiceID    *string                `json:"service_id,omitempty"`
+	PlanID       *string                `json:"plan_id,omitempty"`
+	DashboardURL *string                `json:"dashboard_url,omitempty"`
+	Parameters   map[string]interface{} `json:"parameters,omitempty"`
+}
+
 type errorSpec struct {
 	ErrorMessage *string `json:"error,omitempty"`
 	Description  *string `json:"description,omitempty"`
