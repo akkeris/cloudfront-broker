@@ -47,7 +47,7 @@ jobs:
                   docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}"
                 else
                   docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
-                  docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-alpha"
+                  docker push "docker.io/akkeris/cloudfront-broker:${RELEASE}.${CIRCLE_BUILD_NUM}-beta"
                 fi
               fi
             fi
