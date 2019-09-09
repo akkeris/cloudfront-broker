@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.1.1
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/pkg/errors v0.8.1
-	github.com/pmorie/go-open-service-broker-client v0.0.0-20180330214919-dca737037ce6
+	github.com/pmorie/go-open-service-broker-client v0.0.0-20180912182616-9cc214e88d00
 	github.com/pmorie/osb-broker-lib v0.0.0-20180423023500-052cd99aa13d
 	github.com/prometheus/client_golang v0.9.4
 	github.com/shawn-hurley/osb-broker-k8s-lib v0.0.0-20180430125558-bed19ac36ffe

@@ -7,6 +7,11 @@ import (
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 )
 
+type errorSpec struct {
+	ErrorMessage *string `json:"error,omitempty"`
+	Description  *string `json:"description,omitempty"`
+}
+
 // ConflictErrorWithMessage return OSB conflict error
 func ConflictErrorWithMessage(description string) error {
 	return osb.HTTPStatusCodeError{

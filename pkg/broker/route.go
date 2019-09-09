@@ -30,13 +30,9 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 		vars := mux.Vars(r)
 		c := broker.RequestContext{Request: r, Writer: w}
 		obj, herr := handler(vars["instance_id"], vars, &c)
-		type e struct {
-			ErrorMessage *string `json:"error,omitempty"`
-			Description  *string `json:"description,omitempty"`
-		}
 		if herr != nil {
 			if httpErr, ok := osb.IsHTTPError(herr); ok {
-				body := &e{}
+				body := &errorSpec{}
 				if httpErr.Description != nil {
 					body.Description = httpErr.Description
 				}
@@ -48,7 +44,7 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 			}
 			msg := "InternalServerError"
 			description := "Internal Server Error"
-			body := &e{ErrorMessage: &msg, Description: &description}
+			body := &errorSpec{ErrorMessage: &msg, Description: &description}
 			httpWrite(w, 500, body)
 			return
 		}
@@ -60,8 +56,41 @@ func (b *BusinessLogic) addRoute(router *mux.Router, pathIn string, method strin
 	}).Methods(method)
 }
 
+func (b *BusinessLogic) OSBAddGetBindingRoute(router *mux.Router) {
+	router.HandleFunc("/v2/service_instances/{instance_id}/service_bindings/{binding_id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+
+		req := osb.GetBindingRequest{
+			InstanceID: vars["instance_id"],
+			BindingID:  vars["binding_id"],
+		}
+
+		c := &broker.RequestContext{
+			Writer:  w,
+			Request: r,
+		}
+
+		resp, err := b.GetBinding(&req, c)
+
+		if err != nil {
+			if httpErr, ok := osb.IsHTTPError(err); ok {
+				body := &errorSpec{
+					Description:  httpErr.Description,
+					ErrorMessage: httpErr.ErrorMessage,
+				}
+				httpWrite(w, httpErr.StatusCode, body)
+			} else {
+				httpWrite(w, http.StatusInternalServerError, InternalServerErr())
+			}
+			return
+		}
+		httpWrite(w, http.StatusOK, resp)
+	}).Methods("GET")
+}
+
 // AddRoutes adds extra routes not in broker interface
 func (b *BusinessLogic) AddRoutes(router *mux.Router) {
 	b.addRoute(router, "", "GET", b.GetInstance)
-	b.addRoute(router, "/service_bindings/{binding_id}", "GET", b.GetBinding)
+	// 	b.addRoute(router, "/service_bindings/{binding_id}", "GET", b.GetBinding)
+	b.OSBAddGetBindingRoute(router)
 }

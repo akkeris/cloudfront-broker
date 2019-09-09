@@ -291,13 +291,6 @@ func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext)
 		BindResponse: osb.BindResponse{
 			Async:       false,
 			Credentials: structs.Map(cloudFrontInstance.Access),
-			/*				map[string]interface{}{
-				"CLOUDFRONT_URL":                   cloudFrontInstance.Access.CloudFrontURL,
-				"CLOUDFRONT_BUCKET_NAME":           cloudFrontInstance.Access.BucketName,
-				"CLOUDFRONT_AWS_ACCESS_KEY":        cloudFrontInstance.Access.AwsAccessKey,
-				"CLOUDFRONT_AWS_SECRET_ACCESS_KEY": cloudFrontInstance.Access.AwsSecretAccessKey,
-			},
-			*/
 		},
 	}
 
@@ -349,13 +342,13 @@ func (b *BusinessLogic) GetInstance(instanceID string, vars map[string]string, c
 }
 
 // GetBinding validates binding_id is in cf tags then returns credentials, see Bind()
-func (b *BusinessLogic) GetBinding(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
-
-	if instanceID == "" {
+// func (b *BusinessLogic) GetBinding(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
+func (b *BusinessLogic) GetBinding(r *osb.GetBindingRequest, c *broker.RequestContext) (*osb.GetBindingResponse, error) {
+	if r.InstanceID == "" {
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}
 
-	deployed, err := b.service.IsDeployedInstance(instanceID)
+	deployed, err := b.service.IsDeployedInstance(r.InstanceID)
 	if err != nil {
 		if err.Error() == "DistributionNotDeployed" {
 			return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance found but not deployed")
@@ -368,13 +361,18 @@ func (b *BusinessLogic) GetBinding(instanceID string, vars map[string]string, co
 	}
 
 	// TODO: check if binding id is in tags for cloudfront distribution
-	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(instanceID)
+
+	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(r.InstanceID)
 
 	if err != nil {
 		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
 	}
 
-	return cloudFrontInstance, nil
+	res := &osb.GetBindingResponse{
+		Credentials: structs.Map(cloudFrontInstance.Access),
+	}
+
+	return res, nil
 
 }
 

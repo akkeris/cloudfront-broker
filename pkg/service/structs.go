@@ -76,7 +76,7 @@ type InstanceSpec struct {
 	BillingCode          *string       `json:"billingcode"`
 	CloudfrontID         *string       `json:"cloudfront_id"`
 	CloudfrontURL        *string       `json:"cloudfront_url"`
-	OriginAccessIdentity *string       `json:"origin_access_idenity"`
+	OriginAccessIdentity *string       `json:"origin_access_identity"`
 	S3Bucket             *S3BucketSpec `json:"s3_bucket"`
 	Access               *AccessSpec   `json:"access"`
 }
