@@ -100,7 +100,7 @@ func InitFromOptions(ctx context.Context, o Options) (*storage.PostgresStorage, 
 	return stg, namePrefix, waitSecs, maxRetries, err
 }
 
-// GetCatalog returns an  OSB catalog retreived from the DB
+// GetCatalog returns an  OSB catalog retrieved from the DB
 func (b *BusinessLogic) GetCatalog(c *broker.RequestContext) (*broker.CatalogResponse, error) {
 	var err error
 
@@ -279,13 +279,13 @@ func (b *BusinessLogic) Bind(request *osb.BindRequest, c *broker.RequestContext)
 		return nil, UnprocessableEntityWithMessage("InstanceNotDeployed", "instance not deployed")
 	}
 
-	// TODO: Add binding to cloudfront distribution and S3 bucket, if not already in tag list
-
 	cloudFrontInstance, err := b.service.GetCloudFrontInstanceSpec(request.InstanceID)
 
 	if err != nil {
 		return nil, InternalServerErrWithMessage("ErrGettingInstance", err.Error())
 	}
+
+	// TODO: Add binding(tag) to cloudfront distribution and S3 bucket, if not already in tag list
 
 	response := &broker.BindResponse{
 		BindResponse: osb.BindResponse{
@@ -315,7 +315,7 @@ func (b *BusinessLogic) Update(request *osb.UpdateInstanceRequest, c *broker.Req
 
 // GetInstance returns information about an instance
 
-func (b *BusinessLogic) GetInstance(r *GetInstanceRequest, c *broker.RequestContext) (*GetInstanceResponse, error) {
+func (b *BusinessLogic) FetchInstance(r *GetInstanceRequest, c *broker.RequestContext) (*GetInstanceResponse, error) {
 	instanceID := r.InstanceID
 
 	if instanceID == "" {
@@ -352,7 +352,7 @@ func (b *BusinessLogic) GetInstance(r *GetInstanceRequest, c *broker.RequestCont
 
 // GetBinding validates binding_id is in cf tags then returns credentials, see Bind()
 // func (b *BusinessLogic) GetBinding(instanceID string, vars map[string]string, context *broker.RequestContext) (interface{}, error) {
-func (b *BusinessLogic) GetBinding(r *osb.GetBindingRequest, c *broker.RequestContext) (*osb.GetBindingResponse, error) {
+func (b *BusinessLogic) FetchBinding(r *osb.GetBindingRequest, c *broker.RequestContext) (*osb.GetBindingResponse, error) {
 	if r.InstanceID == "" {
 		return nil, UnprocessableEntityWithMessage("InstanceRequired", "The instance ID was not provided.")
 	}

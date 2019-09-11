@@ -27,6 +27,9 @@ const (
 	OriginNotFound       = "OriginNotFound"
 )
 
+var trueVal = true
+var falseVal = false
+
 // PostgresStorage holds connection link to database
 type PostgresStorage struct {
 	// Storage
@@ -128,6 +131,7 @@ func redactDatabaseURL(dburl string) string {
 func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, error) {
 	var err error
 	err = nil
+
 	// Sanity checks
 	if DatabaseURL == "" && os.Getenv("DATABASE_URL") != "" {
 		DatabaseURL = os.Getenv("DATABASE_URL")
@@ -256,8 +260,6 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 
 // GetServicesCatalog retrieves OSB services from the db
 func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
-	var planUpdateable = true
-
 	services := make([]osb.Service, 0)
 
 	rows, err := p.db.Query(servicesQuery)
@@ -293,9 +295,9 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 			Name:                serviceName,
 			ID:                  serviceID,
 			Description:         nullStringValue(serviceDescription),
-			Bindable:            false,
+			Bindable:            true,
 			BindingsRetrievable: true,
-			PlanUpdatable:       &planUpdateable,
+			PlanUpdatable:       &falseVal,
 			Tags:                strings.Split(nullStringValue(serviceCatagories), ","),
 			Metadata: map[string]interface{}{
 				"name":            nullStringValue(serviceHumanName),
