@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/Masterminds/semver v1.5.0
-	github.com/aws/aws-sdk-go v1.25.0
+	github.com/aws/aws-sdk-go v1.25.1
 	github.com/fatih/structs v1.1.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gorilla/mux v1.7.3
