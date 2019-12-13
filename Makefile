@@ -13,7 +13,7 @@ SRC=*.go pkg/*/*
 SRCDIR=pkg/boker pkg/storage pkg/service
 PKG=$(NAME)/pkg/broker $(NAME)/pkg/storage $(NAME)/pkg/service
 
-VERSION=0.1
+VERSION=1.0
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GO_VERSION := $(shell go version | sed 's/^go version go\(\([0-9]*\.[0-9]*\)*\).*$$/\1/')
 BUILT := $(shell date +"%F-%I:%M:%S%z")
