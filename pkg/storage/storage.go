@@ -138,7 +138,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 	}
 
 	if DatabaseURL == "" {
-		glog.Error("Unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option.")
+		// glog.Error("Unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option.")
 		return nil, errors.New("unable to connect to database, none was specified in the environment via DATABASE_URL or through the -database cli option")
 	}
 
@@ -146,7 +146,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 
 	db, err := sql.Open("postgres", DatabaseURL)
 	if err != nil {
-		glog.Errorf("Unable to open database: %s\n", err.Error())
+		// glog.Errorf("Unable to open database: %s\n", err.Error())
 		return nil, errors.New("Unable to open database: " + err.Error())
 	}
 
@@ -158,7 +158,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 
 	_, err = db.Exec(createScript)
 	if err != nil {
-		glog.Errorf("error creating database tables: %s\n", err)
+		// glog.Errorf("error creating database tables: %s\n", err)
 		return nil, err
 	}
 
@@ -168,7 +168,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 	if err != nil || cnt == 0 {
 		_, err = db.Exec(initServicesScript)
 		if err != nil {
-			glog.Errorf("error initializing services: %s\n", err)
+			// glog.Errorf("error initializing services: %s\n", err)
 			return nil, err
 		}
 	}
@@ -177,7 +177,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 	if err != nil || cnt == 0 {
 		_, err = db.Exec(initPlansScript)
 		if err != nil {
-			glog.Errorf("error initializing plans: %s\n", err)
+			// glog.Errorf("error initializing plans: %s\n", err)
 			return nil, err
 		}
 	}
@@ -188,7 +188,7 @@ func InitStorage(ctx context.Context, DatabaseURL string) (*PostgresStorage, err
 func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 	rows, err := db.Query(plansQuery+"and services.service_id = $1 order by plans.name", serviceID)
 	if err != nil {
-		glog.Errorf("getPlans query failed: %s\n", err.Error())
+		// glog.Errorf("getPlans query failed: %s\n", err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -203,7 +203,7 @@ func getCatalogPlans(db *sql.DB, serviceID string) ([]osb.Plan, error) {
 
 		err := rows.Scan(&planID, &name, &serviceName, &humanName, &description, &catagories, &free, &cents, &costUnit)
 		if err != nil {
-			glog.Errorf("Scan from plans query failed: %s\n", err.Error())
+			// glog.Errorf("Scan from plans query failed: %s\n", err.Error())
 			return nil, errors.New("Scan from plans query failed: " + err.Error())
 		}
 
@@ -265,7 +265,7 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 	rows, err := p.db.Query(servicesQuery)
 	if err != nil {
 		msg := fmt.Sprintf("GetServiceCatalog: Unable to get services: " + err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 	defer rows.Close()
@@ -276,13 +276,13 @@ func (p *PostgresStorage) GetServicesCatalog() ([]osb.Service, error) {
 
 		err = rows.Scan(&serviceID, &serviceName, &serviceHumanName, &serviceDescription, &serviceCatagories, &serviceImage)
 		if err != nil {
-			glog.Errorf("Unable to get services: %s\n", err.Error())
+			// glog.Errorf("Unable to get services: %s\n", err.Error())
 			return nil, errors.New("Unable to scan services: " + err.Error())
 		}
 
 		plans, err := getCatalogPlans(p.db, serviceID)
 		if err != nil {
-			glog.Errorf("Unable to get plans for %s: %s\n", serviceName, err.Error())
+			// glog.Errorf("Unable to get plans for %s: %s\n", serviceName, err.Error())
 			return nil, errors.New("Unable to get plans for " + serviceName + ": " + err.Error())
 		}
 
@@ -333,12 +333,12 @@ func (p *PostgresStorage) GetDistributionWithDeleted(distributionID string) (*Di
 
 	switch {
 	case err == sql.ErrNoRows:
-		msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
-		glog.V(4).Info(msg)
+		// msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
+		// glog.V(4).Info(msg)
 		return nil, errors.New(DistributionNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("GetDistribution: error finding distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -372,12 +372,12 @@ func (p *PostgresStorage) GetDistribution(distributionID string) (*Distribution,
 
 	switch {
 	case err == sql.ErrNoRows:
-		msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
-		glog.V(4).Info(msg)
+		// msg := fmt.Sprintf("GetDistribution: distribution not found: %s", err.Error())
+		// glog.V(4).Info(msg)
 		return nil, errors.New(DistributionNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("GetDistribution: error finding distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -396,17 +396,17 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("NewDistribution: can not find plan: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("NewDistribution: error finding plan: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
 	if _, err = p.GetDistribution(distributionID); err == nil {
-		msg := "NewDistribution: found distribution"
-		glog.Error(msg)
+		// msg := "NewDistribution: found distribution"
+		// glog.Error(msg)
 		return errors.New(DistributionFound)
 	}
 
@@ -418,7 +418,7 @@ func (p *PostgresStorage) NewDistribution(distributionID string, planID string, 
 	err = p.db.QueryRow(insertDistScript, distributionID, planID, billingCodeStr, callerReference, status).Scan(&distribution.DistributionID)
 	if err != nil {
 		msg := fmt.Sprintf("NewDistribution: error inserting distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -444,11 +444,11 @@ func (p *PostgresStorage) UpdateDistributionStatus(distributionID string, status
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("UpdateDistributionStatus: distribution not found: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("UpdateDistributionStatus: error updating distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -463,7 +463,7 @@ func (p *PostgresStorage) UpdateDeleteDistribution(distributionID string) error 
 
 	if err != nil {
 		msg := fmt.Sprintf("DeleteDistribution: error setting deleted_at: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -490,11 +490,11 @@ func (p *PostgresStorage) UpdateDistributionCloudfront(distributionID string, cl
 
 	if err != nil && err.Error() == "sql: no rows in result set" {
 		msg := fmt.Sprintf("UpdateDistributionCloudfront: distribution not found: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("UpdateDistributionCloudfront: error updating distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -517,7 +517,7 @@ func (p *PostgresStorage) AddOrigin(distributionID string, bucketName string, bu
 
 	if err != nil {
 		msg := fmt.Sprintf("AddOrigin: error inserting origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -557,12 +557,12 @@ func (p *PostgresStorage) getOrigin(selectOrigin string, selectKey string) (*Ori
 
 	switch {
 	case err == sql.ErrNoRows:
-		msg := fmt.Sprintf("getOrigin: origin not found: %s", err.Error())
-		glog.V(4).Info(msg)
+		// msg := fmt.Sprintf("getOrigin: origin not found: %s", err.Error())
+		// glog.V(4).Info(msg)
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("getOrigin: error finding origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -579,12 +579,12 @@ func (p *PostgresStorage) UpdateDeleteOrigin(distributionID string, originID str
 	)
 	switch {
 	case err == sql.ErrNoRows:
-		msg := fmt.Sprintf("UpdateDeleteOrigin: origin not found: %s", err.Error())
-		glog.V(4).Info(msg)
+		// msg := fmt.Sprintf("UpdateDeleteOrigin: origin not found: %s", err.Error())
+		// glog.V(4).Info(msg)
 		return nil, errors.New(OriginNotFound)
 	case err != nil:
 		msg := fmt.Sprintf("UpdateDeleteOrigin: error updating deleted at: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return nil, errors.New(msg)
 	}
 
@@ -600,11 +600,11 @@ func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("AddIAMUser: origin not found: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	case err != nil:
 		msg := fmt.Sprintf("AddIAMUser: error finding origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -612,7 +612,7 @@ func (p *PostgresStorage) AddIAMUser(originID string, iAMUser string) error {
 
 	if err != nil {
 		msg := fmt.Sprintf("AddIAMUser: error updating origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -628,11 +628,11 @@ func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secret
 	switch {
 	case err == sql.ErrNoRows:
 		msg := fmt.Sprintf("AddAccessKey: origin not found: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	case err != nil:
 		msg := fmt.Sprintf("AddAccessKey: error finding origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -640,7 +640,7 @@ func (p *PostgresStorage) AddAccessKey(originID string, accessKey string, secret
 
 	if err != nil {
 		msg := fmt.Sprintf("AddAccessKey: error updating origin: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -655,7 +655,7 @@ func (p *PostgresStorage) UpdateDistributionWIthOriginAccessIdentity(distributio
 
 	if err != nil {
 		msg := fmt.Sprintf("UpdateDistributionWIthOriginAccessIdentity: distribution not found: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
@@ -663,7 +663,7 @@ func (p *PostgresStorage) UpdateDistributionWIthOriginAccessIdentity(distributio
 
 	if err != nil {
 		msg := fmt.Sprintf("UpdateDistributionWIthOriginAccessIdentity: error updating distribution: %s", err.Error())
-		glog.Error(msg)
+		// glog.Error(msg)
 		return errors.New(msg)
 	}
 
