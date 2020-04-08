@@ -10,7 +10,7 @@ jobs:
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
       with:
-        name: akkeris/database-broker
+        name: akkeris/cloudfront-broker
         username: ${{ secrets.DockerUser }}
         password: ${{ secrets.DockerPassword }}
         tag_names: true
