@@ -34,22 +34,18 @@ jobs:
             make image
       - deploy:
           name: Push application Docker image
-          environment:
-            VERSION: 1.0
           command: |
             if [ "${CIRCLE_BRANCH}" != "release" ]; then
               if [ "${CIRCLE_PROJECT_USERNAME}" == "akkeris" ]; then
                 docker login -u $DOCKER_LOGIN -p $DOCKER_PASS
                 if [ "${CIRCLE_BRANCH}" == "master" ]; then
-                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${VERSION}.${CIRCLE_BUILD_NUM}"
                   docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
                   docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:latest"
                   docker push "docker.io/akkeris/cloudfront-broker:latest"
                   docker push "docker.io/akkeris/cloudfront-broker:release-${CIRCLE_BUILD_NUM}"
-                  docker push "docker.io/akkeris/cloudfront-broker:${VERSION}.${CIRCLE_BUILD_NUM}"
                 else
-                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:${VERSION}.${CIRCLE_BUILD_NUM}-beta"
-                  docker push "docker.io/akkeris/cloudfront-broker:${VERSION}.${CIRCLE_BUILD_NUM}-beta"
+                  docker tag cloudfront-broker "docker.io/akkeris/cloudfront-broker:release.${CIRCLE_BUILD_NUM}-beta"
+                  docker push "docker.io/akkeris/cloudfront-broker:release.${CIRCLE_BUILD_NUM}-beta"
                 fi
               fi
             fi
