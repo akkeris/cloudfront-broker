@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.25.2
 	github.com/fatih/structs v1.1.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
-	github.com/gorilla/mux v1.7.3
+	github.com/gorilla/mux v1.8.0
 	github.com/kubernetes/client-go v11.0.0+incompatible // indirect
 	github.com/lib/pq v1.2.0
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
